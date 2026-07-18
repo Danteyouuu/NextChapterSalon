@@ -20,6 +20,7 @@ import * as dashboardData from "./api/dashboard-data.js";
 import * as manualAppointment from "./api/manual-appointment.js";
 import * as adminLogin from "./api/admin-login.js";
 import * as adminLogout from "./api/admin-logout.js";
+import * as uploadImage from "./api/upload-image.js";
 
 import * as homePage from "./pages/home.js";
 import * as aboutPage from "./pages/about.js";
@@ -35,6 +36,7 @@ import * as myAppointmentPage from "./pages/my-appointment.js";
 import * as dashboardPage from "./pages/dashboard.js";
 import * as adminPage from "./pages/admin.js";
 import * as calendarFeed from "./pages/calendar-feed.js";
+import * as imageServe from "./pages/image-serve.js";
 
 export async function routeNextChapterSalon(request, env, ctx, path, method) {
   const context = (params = {}) => ({
@@ -88,6 +90,9 @@ export async function routeNextChapterSalon(request, env, ctx, path, method) {
   if (path === "/api/admin-logout" && method === "POST") {
     return adminLogout.onRequestPost(context());
   }
+  if (path === "/api/upload-image" && method === "POST") {
+    return uploadImage.onRequestPost(context());
+  }
 
   // ---- Pages ----
   if (path === "/" && method === "GET") {
@@ -137,6 +142,11 @@ export async function routeNextChapterSalon(request, env, ctx, path, method) {
   const feedMatch = path.match(/^\/feed\/([^/]+)\.ics$/);
   if (feedMatch && method === "GET") {
     return calendarFeed.onRequestGet(context({ manageToken: feedMatch[1] }));
+  }
+
+  const imageMatch = path.match(/^\/images\/([^/]+)$/);
+  if (imageMatch && method === "GET") {
+    return imageServe.onRequestGet(context({ key: imageMatch[1] }));
   }
 
   return null;

@@ -30,6 +30,15 @@ binding = "DB"
 database_name = "next-chapter-salon-db"
 database_id = "3f9fba06-63e6-461c-9c55-297d35c2fe12"
 
+# Stores uploaded gallery/team photos (see api/upload-image.js and
+# pages/image-serve.js). TODO: fill in after creating the bucket
+# (Cloudflare dashboard -> R2 -> Create bucket, name it
+# next-chapter-salon-images) -- same one-time setup pattern as the D1
+# database above.
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "next-chapter-salon-images"
+
 # Hourly sweep for the 23-25-hour-out appointment reminder emails — see
 # worker/index.js's scheduled() handler and lib/reminders.js.
 [triggers]

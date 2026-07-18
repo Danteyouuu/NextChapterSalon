@@ -50,8 +50,33 @@ const schema = readFileSync(`${ROOT}/schema.sql`, "utf8");
 sqlite.exec(schema);
 const DB = new D1Shim(sqlite);
 
+// Minimal in-memory R2 shim -- enough to exercise api/upload-image.js and
+// pages/image-serve.js (auth gating, content-type validation, round-trip
+// put/get) without a live R2 bucket. Real crop/zoom happens client-side in
+// the browser via <canvas>, so there's nothing to test there in Node.
+class R2Shim {
+  constructor() { this.store = new Map(); }
+  async put(key, value, opts) {
+    const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : value;
+    this.store.set(key, { bytes, httpMetadata: (opts && opts.httpMetadata) || {} });
+  }
+  async get(key) {
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    return {
+      body: entry.bytes,
+      httpEtag: `"${key}"`,
+      writeHttpMetadata(headers) {
+        if (entry.httpMetadata.contentType) headers.set("content-type", entry.httpMetadata.contentType);
+        if (entry.httpMetadata.cacheControl) headers.set("cache-control", entry.httpMetadata.cacheControl);
+      },
+    };
+  }
+}
+
 const env = {
   DB,
+  IMAGES: new R2Shim(),
   SITE_URL: "http://localhost:8787",
 };
 const ctx = { waitUntil: (p) => p };
@@ -70,18 +95,20 @@ async function call(method, pathWithQuery, body) {
 }
 
 // Same as call(), but lets a test attach a Cookie header (for /admin session
-// tests), a CF-Connecting-IP header (for rate-limit tests), and inspect the
+// tests), a CF-Connecting-IP header (for rate-limit tests), a raw binary
+// body with its own Content-Type (for /api/upload-image), and inspect the
 // raw Response (for reading Set-Cookie back out).
-async function callRaw(method, pathWithQuery, { body, cookie, ip } = {}) {
+async function callRaw(method, pathWithQuery, { body, cookie, ip, rawBody, contentType } = {}) {
   const u = new URL(`http://localhost${pathWithQuery}`);
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
+  if (rawBody && contentType) headers["Content-Type"] = contentType;
   if (cookie) headers["Cookie"] = cookie;
   if (ip) headers["CF-Connecting-IP"] = ip;
   const request = new Request(u.toString(), {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: rawBody !== undefined ? rawBody : (body ? JSON.stringify(body) : undefined),
   });
   return routeNextChapterSalon(request, env, ctx, u.pathname, method);
 }
@@ -435,6 +462,42 @@ await check("POST /api/admin-logout clears the cookie", async () => {
   const res = await callRaw("POST", "/api/admin-logout");
   const setCookie = res.headers.get("Set-Cookie") || res.headers.get("set-cookie");
   assert(setCookie && setCookie.includes("Max-Age=0"), "logout should clear the cookie with Max-Age=0");
+});
+
+console.log("=== /api/upload-image + /images/:key ===");
+
+await check("POST /api/upload-image with no manageToken -> 401", async () => {
+  const res = await callRaw("POST", "/api/upload-image", { rawBody: new Uint8Array([1, 2, 3]).buffer, contentType: "image/jpeg" });
+  assert(res.status === 401, `expected 401, got ${res.status}`);
+});
+
+await check("POST /api/upload-image with wrong manageToken -> 401", async () => {
+  const res = await callRaw("POST", "/api/upload-image?manageToken=not-real", { rawBody: new Uint8Array([1, 2, 3]).buffer, contentType: "image/jpeg" });
+  assert(res.status === 401, `expected 401, got ${res.status}`);
+});
+
+await check("POST /api/upload-image with unsupported content-type -> 400", async () => {
+  const res = await callRaw("POST", `/api/upload-image?manageToken=${MANAGE_TOKEN}`, { rawBody: new Uint8Array([1, 2, 3]).buffer, contentType: "text/plain" });
+  assert(res.status === 400, `expected 400, got ${res.status}`);
+});
+
+await check("POST /api/upload-image with valid token + image bytes -> stores in R2, returns /images/:key", async () => {
+  const fakeJpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xdb, 1, 2, 3, 4]).buffer;
+  const res = await callRaw("POST", `/api/upload-image?manageToken=${MANAGE_TOKEN}`, { rawBody: fakeJpegBytes, contentType: "image/jpeg" });
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  const data = await res.json();
+  assert(data.ok && /^\/images\/[\w-]+\.jpg$/.test(data.url), "expected an /images/<uuid>.jpg url, got: " + JSON.stringify(data));
+
+  const getRes = await call("GET", data.url);
+  assert(getRes.status === 200, `GET the uploaded image: expected 200, got ${getRes.status}`);
+  assert(getRes.headers.get("content-type") === "image/jpeg", "wrong content-type on retrieval: " + getRes.headers.get("content-type"));
+  const bytesBack = new Uint8Array(await getRes.arrayBuffer());
+  assert(bytesBack.length === 8 && bytesBack[0] === 0xff, "roundtripped bytes don't match what was uploaded");
+});
+
+await check("GET /images/:key for a key that doesn't exist -> 404", async () => {
+  const res = await call("GET", "/images/does-not-exist.jpg");
+  assert(res.status === 404, `expected 404, got ${res.status}`);
 });
 
 await check("/dashboard/:manageToken direct link still works unchanged", async () => {

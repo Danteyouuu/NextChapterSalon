@@ -49,10 +49,56 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   .mini-btn { padding:6px 14px; font-size:0.75rem; }
   .edit-row { display:grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap:10px; align-items:center; margin-bottom:10px; }
   .edit-row input, .edit-row select { margin-bottom:0; }
+  .edit-row--team { grid-template-columns: 1fr 1fr 2fr auto; }
+  .edit-row--testimonial { grid-template-columns: 1fr 3fr 80px auto; }
+  .edit-row--gallery { grid-template-columns: 1fr 1fr 2fr auto; }
+  .edit-row .svcRemove, .edit-row .stRemove, .edit-row .tmRemove, .edit-row .glRemove { justify-self:end; }
   @media (max-width: 900px) { .edit-row { grid-template-columns: 1fr 1fr; } }
   .hours-row { display:grid; grid-template-columns: 120px 1fr 1fr auto; gap:10px; align-items:center; margin-bottom:10px; }
   .subtab-empty { color:var(--cream-faint); padding: 30px 0; text-align:center; }
   .feed-box { background: var(--bg-panel-2); border:1px solid var(--gold-dim); border-radius:6px; padding:16px; font-family:monospace; font-size:0.82rem; word-break:break-all; color:var(--gold-bright); }
+
+  /* ---- Mobile: this is the primary way the owner will use the dashboard,
+     so every multi-column editor row collapses to one field per line
+     instead of cramming 3-5 inputs into a 375px-wide screen. The
+     !important is intentional and scoped to this single breakpoint --
+     these grid-template-columns values are also set inline/per-variant
+     above, and this is the one rule that needs to always win at this
+     width regardless of which variant it is. */
+  @media (max-width: 640px) {
+    .edit-row, .edit-row--team, .edit-row--testimonial, .edit-row--gallery, .hours-row {
+      grid-template-columns: 1fr !important;
+      gap: 8px;
+      padding: 14px; background: var(--bg-panel-2); border:1px solid rgba(201,166,107,0.15); border-radius:6px; margin-bottom:12px;
+    }
+    .edit-row .svcRemove, .edit-row .stRemove, .edit-row .tmRemove, .edit-row .glRemove, .hrRemove {
+      justify-self:stretch; margin-top:4px;
+    }
+    .dash-header__inner { gap:10px; }
+    .dash-header__inner > div:last-child { width:100%; }
+    .dash-header__inner > div:last-child a, .dash-header__inner > div:last-child button { flex:1; text-align:center; }
+    .tabs { gap:2px; }
+    .tab-btn { padding:9px 12px; font-size:0.78rem; }
+    .req-row > div:last-child { width:100%; }
+    .req-row > div:last-child button { flex:1; }
+    .row-list__item { flex-direction:column; align-items:flex-start; }
+    .row-list__item > div:last-child { text-align:left; margin-top:6px; }
+    .cropper-box { width:100% !important; height:min(70vw,320px) !important; }
+    .cropper-panel { padding:16px !important; }
+  }
+
+  /* ---- Photo upload + crop/zoom widget (see openImageCropper() below) ---- */
+  .photo-field { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .photo-thumb { width:56px; height:56px; border-radius:6px; object-fit:cover; border:1px solid rgba(201,166,107,0.25); background:var(--bg-panel-2); flex-shrink:0; }
+  .photo-thumb--empty { display:flex; align-items:center; justify-content:center; color:var(--cream-faint); font-size:0.7rem; text-align:center; }
+  .cropper-overlay { position:fixed; inset:0; background:rgba(10,8,7,0.82); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .cropper-panel { background:var(--bg-panel); border:1px solid var(--gold-dim); border-radius:8px; padding:24px; max-width:480px; width:100%; }
+  .cropper-box { width:320px; height:320px; max-width:100%; margin:0 auto; overflow:hidden; border-radius:6px; border:1px solid rgba(201,166,107,0.3); background:#000; position:relative; cursor:grab; touch-action:none; }
+  .cropper-box:active { cursor:grabbing; }
+  .cropper-box canvas { display:block; width:100%; height:100%; }
+  .cropper-controls { display:flex; align-items:center; gap:10px; margin:16px 0; }
+  .cropper-controls input[type="range"] { margin:0; width:100%; }
+  .cropper-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 </style>
 </head>
 <body>
@@ -114,7 +160,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
       </div>
       <label>Notes</label>
       <textarea id="manualNotes"></textarea>
-      <div style="display:flex;gap:10px;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn btn--gold" id="saveManualBtn">Add to Calendar</button>
         <button class="btn btn--ghost" id="cancelManualBtn">Cancel</button>
       </div>
@@ -318,6 +364,185 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     return String(str == null ? '' : str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // ---- Photo upload + crop/zoom widget ----
+  // Self-contained (no external cropper library -- keeps the CSP simple and
+  // avoids a CDN dependency): picks a file, lets the owner drag to pan and
+  // use a slider to zoom over a fixed-aspect viewport, then rasterizes the
+  // visible crop to an output canvas and uploads that as the final image.
+  // outputW/outputH set both the crop aspect ratio and the stored resolution.
+  function openImageCropper(opts, onDone) {
+    var outputW = opts.outputW || 800;
+    var outputH = opts.outputH || 800;
+    var boxAspect = outputW / outputH;
+
+    var fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/png,image/jpeg,image/webp';
+    fileInput.style.display = 'none';
+    document.body.appendChild(fileInput);
+    fileInput.onchange = function () {
+      var file = fileInput.files[0];
+      document.body.removeChild(fileInput);
+      if (!file) return;
+      var img = new Image();
+      img.onload = function () { showCropperModal(img); };
+      img.onerror = function () { alert('Could not read that image file.'); };
+      img.src = URL.createObjectURL(file);
+    };
+    fileInput.click();
+
+    function showCropperModal(img) {
+      var overlay = document.createElement('div');
+      overlay.className = 'cropper-overlay';
+      overlay.innerHTML =
+        '<div class="cropper-panel">' +
+          '<h4 style="margin-top:0;">Adjust Photo</h4>' +
+          '<p class="text-dim" style="font-size:0.85rem;margin-top:-8px;">Drag to reposition, use the slider to zoom in or out.</p>' +
+          '<div class="cropper-box"><canvas></canvas></div>' +
+          '<div class="cropper-controls">' +
+            '<span class="text-dim" style="font-size:0.8rem;">Zoom</span>' +
+            '<input type="range" id="cropZoom" min="100" max="400" value="100">' +
+          '</div>' +
+          '<div class="cropper-actions">' +
+            '<button class="btn btn--ghost btn--sm" id="cropCancel" type="button">Cancel</button>' +
+            '<button class="btn btn--gold btn--sm" id="cropSave" type="button">Use Photo</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+
+      var boxEl = overlay.querySelector('.cropper-box');
+      var canvas = overlay.querySelector('canvas');
+      var ctx = canvas.getContext('2d');
+      var VIEW = 320; // logical viewport size in CSS px (box is styled to match, scales down responsively via CSS)
+      canvas.width = VIEW;
+      canvas.height = VIEW / boxAspect;
+      boxEl.style.height = (VIEW / boxAspect) + 'px';
+
+      // Base scale: smallest zoom that still fully covers the viewport.
+      var coverScale = Math.max(canvas.width / img.width, canvas.height / img.height);
+      var zoom = 1; // multiplier on top of coverScale, driven by the slider
+      var offsetX = 0, offsetY = 0; // pan, in source-image pixels, centered
+
+      function clampOffsets() {
+        var scale = coverScale * zoom;
+        var maxX = Math.max(0, (img.width - canvas.width / scale) / 2);
+        var maxY = Math.max(0, (img.height - canvas.height / scale) / 2);
+        offsetX = Math.max(-maxX, Math.min(maxX, offsetX));
+        offsetY = Math.max(-maxY, Math.min(maxY, offsetY));
+      }
+
+      function draw() {
+        clampOffsets();
+        var scale = coverScale * zoom;
+        var srcW = canvas.width / scale, srcH = canvas.height / scale;
+        var srcX = (img.width - srcW) / 2 + offsetX;
+        var srcY = (img.height - srcH) / 2 + offsetY;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+      }
+      draw();
+
+      overlay.querySelector('#cropZoom').addEventListener('input', function (e) {
+        zoom = Number(e.target.value) / 100;
+        draw();
+      });
+
+      // Drag to pan (mouse + touch via Pointer Events).
+      var dragging = false, lastX = 0, lastY = 0;
+      boxEl.addEventListener('pointerdown', function (e) {
+        dragging = true; lastX = e.clientX; lastY = e.clientY;
+        boxEl.setPointerCapture(e.pointerId);
+      });
+      boxEl.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        var scale = coverScale * zoom;
+        var rectScale = canvas.width / boxEl.clientWidth; // canvas logical px per CSS px, since the box scales down on small screens
+        offsetX -= (e.clientX - lastX) * rectScale / scale;
+        offsetY -= (e.clientY - lastY) * rectScale / scale;
+        lastX = e.clientX; lastY = e.clientY;
+        draw();
+      });
+      function endDrag() { dragging = false; }
+      boxEl.addEventListener('pointerup', endDrag);
+      boxEl.addEventListener('pointercancel', endDrag);
+
+      function close() { document.body.removeChild(overlay); }
+      overlay.querySelector('#cropCancel').onclick = close;
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+
+      overlay.querySelector('#cropSave').onclick = function () {
+        var saveBtn = overlay.querySelector('#cropSave');
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Uploading…';
+        var out = document.createElement('canvas');
+        out.width = outputW;
+        out.height = outputH;
+        var outCtx = out.getContext('2d');
+        var scale = coverScale * zoom;
+        var srcW = canvas.width / scale, srcH = canvas.height / scale;
+        var srcX = (img.width - srcW) / 2 + offsetX;
+        var srcY = (img.height - srcH) / 2 + offsetY;
+        outCtx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, out.width, out.height);
+        out.toBlob(function (blob) {
+          fetch('/api/upload-image?manageToken=' + encodeURIComponent(MANAGE_TOKEN), {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: blob,
+          }).then(function (r) { return r.json(); }).then(function (res) {
+            if (!res.ok) { alert(res.error || 'Upload failed.'); saveBtn.disabled = false; saveBtn.textContent = 'Use Photo'; return; }
+            close();
+            onDone(res.url);
+          }).catch(function () {
+            alert('Upload failed. Please try again.');
+            saveBtn.disabled = false; saveBtn.textContent = 'Use Photo';
+          });
+        }, 'image/jpeg', 0.9);
+      };
+    }
+  }
+
+  // Wires an "Upload Photo" button + thumbnail preview into a container,
+  // tracking the current URL on the container's dataset so save handlers
+  // can read it back out alongside the row's other fields.
+  function bindPhotoField(container, initialUrl, cropOpts) {
+    container.dataset.photoUrl = initialUrl || '';
+    function render() {
+      var url = container.dataset.photoUrl;
+      container.innerHTML =
+        (url ? '<img class="photo-thumb" src="' + escapeHtml(url) + '">' : '<div class="photo-thumb photo-thumb--empty">No photo</div>') +
+        '<button class="btn btn--ghost mini-btn photoUploadBtn" type="button">' + (url ? 'Replace Photo' : 'Upload Photo') + '</button>';
+      container.querySelector('.photoUploadBtn').onclick = function () {
+        openImageCropper(cropOpts, function (url) {
+          container.dataset.photoUrl = url;
+          render();
+        });
+      };
+    }
+    render();
+  }
+
+  // Same idea as bindPhotoField, but for rows (like Gallery) that already
+  // have a plain "Image URL" text input the save handler reads from --
+  // wires the upload button to just fill that input rather than tracking
+  // its own separate dataset, so a manually-pasted URL and an uploaded
+  // photo both end up in the same place.
+  function bindPhotoFieldToInput(container, inputEl, cropOpts) {
+    function render() {
+      var url = inputEl.value;
+      container.innerHTML =
+        (url ? '<img class="photo-thumb" src="' + escapeHtml(url) + '">' : '<div class="photo-thumb photo-thumb--empty">No photo</div>') +
+        '<button class="btn btn--ghost mini-btn photoUploadBtn" type="button">' + (url ? 'Replace Photo' : 'Upload Photo') + '</button>';
+      container.querySelector('.photoUploadBtn').onclick = function () {
+        openImageCropper(cropOpts, function (url) {
+          inputEl.value = url;
+          render();
+        });
+      };
+    }
+    inputEl.addEventListener('input', render);
+    render();
+  }
+
   // ---- Manual appointment ----
   document.getElementById('openManualBtn').onclick = function () {
     var form = document.getElementById('manualForm');
@@ -422,32 +647,48 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   // ---- Team editor ----
   function renderTeamEditor() {
     var el = document.getElementById('teamEditor');
-    el.innerHTML = (DATA.stylists || []).filter(function (s) { return s.active; }).map(function (s) {
-      return '<div class="edit-row" style="grid-template-columns:1fr 1fr 2fr auto;" data-id="' + s.id + '">' +
-        '<input class="stName" value="' + escapeHtml(s.name) + '" placeholder="Name">' +
-        '<input class="stTitle" value="' + escapeHtml(s.title || '') + '" placeholder="Title">' +
-        '<input class="stBio" value="' + escapeHtml(s.bio || '') + '" placeholder="Short bio">' +
-        '<button class="btn btn--ghost mini-btn stRemove" type="button">Remove</button>' +
+    var stylists = (DATA.stylists || []).filter(function (s) { return s.active; });
+    el.innerHTML = stylists.map(function (s) {
+      return '<div class="stylist-block" style="margin-bottom:18px;">' +
+        '<div class="photo-field"></div>' +
+        '<div class="edit-row edit-row--team" data-id="' + s.id + '">' +
+          '<input class="stName" value="' + escapeHtml(s.name) + '" placeholder="Name">' +
+          '<input class="stTitle" value="' + escapeHtml(s.title || '') + '" placeholder="Title">' +
+          '<input class="stBio" value="' + escapeHtml(s.bio || '') + '" placeholder="Short bio">' +
+          '<button class="btn btn--ghost mini-btn stRemove" type="button">Remove</button>' +
+        '</div>' +
       '</div>';
     }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.photo-field'), function (field, i) {
+      bindPhotoField(field, stylists[i] ? stylists[i].photo_url : null, { outputW: 600, outputH: 600 });
+    });
     bindStylistRemove();
   }
   function bindStylistRemove() {
-    document.querySelectorAll('.stRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.edit-row').remove(); }; });
+    document.querySelectorAll('.stRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.stylist-block').remove(); }; });
   }
   document.getElementById('addStylistBtn').onclick = function () {
     var el = document.getElementById('teamEditor');
-    var row = document.createElement('div');
-    row.className = 'edit-row';
-    row.style.gridTemplateColumns = '1fr 1fr 2fr auto';
-    row.innerHTML = '<input class="stName" placeholder="Name"><input class="stTitle" placeholder="Title"><input class="stBio" placeholder="Short bio"><button class="btn btn--ghost mini-btn stRemove" type="button">Remove</button>';
-    el.appendChild(row);
+    var block = document.createElement('div');
+    block.className = 'stylist-block';
+    block.style.marginBottom = '18px';
+    block.innerHTML = '<div class="photo-field"></div><div class="edit-row edit-row--team"><input class="stName" placeholder="Name"><input class="stTitle" placeholder="Title"><input class="stBio" placeholder="Short bio"><button class="btn btn--ghost mini-btn stRemove" type="button">Remove</button></div>';
+    el.appendChild(block);
+    bindPhotoField(block.querySelector('.photo-field'), null, { outputW: 600, outputH: 600 });
     bindStylistRemove();
   };
   document.getElementById('saveTeamBtn').onclick = function () {
     var rows = document.querySelectorAll('#teamEditor .edit-row');
-    var stylists = Array.prototype.map.call(rows, function (row) {
-      return { id: row.dataset.id ? Number(row.dataset.id) : undefined, name: row.querySelector('.stName').value, title: row.querySelector('.stTitle').value, bio: row.querySelector('.stBio').value, active: true };
+    var photoFields = document.querySelectorAll('#teamEditor .photo-field');
+    var stylists = Array.prototype.map.call(rows, function (row, i) {
+      return {
+        id: row.dataset.id ? Number(row.dataset.id) : undefined,
+        name: row.querySelector('.stName').value,
+        title: row.querySelector('.stTitle').value,
+        bio: row.querySelector('.stBio').value,
+        photo_url: photoFields[i] ? (photoFields[i].dataset.photoUrl || null) : null,
+        active: true,
+      };
     });
     fetch('/api/manage-stylists', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -525,7 +766,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   function renderContentEditor() {
     var tEl = document.getElementById('testimonialsEditor');
     tEl.innerHTML = (DATA.testimonials || []).filter(function (t) { return t.active; }).map(function (t) {
-      return '<div class="edit-row" style="grid-template-columns:1fr 3fr 80px auto;" data-id="' + t.id + '">' +
+      return '<div class="edit-row edit-row--testimonial" data-id="' + t.id + '">' +
         '<input class="tmName" value="' + escapeHtml(t.client_name) + '" placeholder="Client name">' +
         '<input class="tmQuote" value="' + escapeHtml(t.quote) + '" placeholder="Quote">' +
         '<input class="tmRating" type="number" min="1" max="5" value="' + t.rating + '">' +
@@ -536,32 +777,38 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
 
     var gEl = document.getElementById('galleryEditor');
     gEl.innerHTML = (DATA.galleryItems || []).filter(function (g) { return g.active; }).map(function (g) {
-      return '<div class="edit-row" style="grid-template-columns:1fr 1fr 2fr auto;" data-id="' + g.id + '">' +
-        '<input class="glLabel" value="' + escapeHtml(g.label) + '" placeholder="Label">' +
-        '<input class="glCategory" value="' + escapeHtml(g.category) + '" placeholder="Category">' +
-        '<input class="glImage" value="' + escapeHtml(g.image_url || '') + '" placeholder="Image URL (optional)">' +
-        '<button class="btn btn--ghost mini-btn glRemove" type="button">Remove</button>' +
+      return '<div class="gallery-block" style="margin-bottom:18px;">' +
+        '<div class="photo-field"></div>' +
+        '<div class="edit-row edit-row--gallery" data-id="' + g.id + '">' +
+          '<input class="glLabel" value="' + escapeHtml(g.label) + '" placeholder="Label">' +
+          '<input class="glCategory" value="' + escapeHtml(g.category) + '" placeholder="Category">' +
+          '<input class="glImage" value="' + escapeHtml(g.image_url || '') + '" placeholder="Image URL (or upload above)">' +
+          '<button class="btn btn--ghost mini-btn glRemove" type="button">Remove</button>' +
+        '</div>' +
       '</div>';
     }).join('');
-    document.querySelectorAll('.glRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.edit-row').remove(); }; });
+    Array.prototype.forEach.call(gEl.querySelectorAll('.gallery-block'), function (block) {
+      bindPhotoFieldToInput(block.querySelector('.photo-field'), block.querySelector('.glImage'), { outputW: 900, outputH: 675 });
+    });
+    document.querySelectorAll('.glRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.gallery-block').remove(); }; });
   }
   document.getElementById('addTestimonialBtn').onclick = function () {
     var el = document.getElementById('testimonialsEditor');
     var row = document.createElement('div');
-    row.className = 'edit-row';
-    row.style.gridTemplateColumns = '1fr 3fr 80px auto';
+    row.className = 'edit-row edit-row--testimonial';
     row.innerHTML = '<input class="tmName" placeholder="Client name"><input class="tmQuote" placeholder="Quote"><input class="tmRating" type="number" min="1" max="5" value="5"><button class="btn btn--ghost mini-btn tmRemove" type="button">Remove</button>';
     el.appendChild(row);
     document.querySelectorAll('.tmRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.edit-row').remove(); }; });
   };
   document.getElementById('addGalleryBtn').onclick = function () {
     var el = document.getElementById('galleryEditor');
-    var row = document.createElement('div');
-    row.className = 'edit-row';
-    row.style.gridTemplateColumns = '1fr 1fr 2fr auto';
-    row.innerHTML = '<input class="glLabel" placeholder="Label"><input class="glCategory" placeholder="Category"><input class="glImage" placeholder="Image URL (optional)"><button class="btn btn--ghost mini-btn glRemove" type="button">Remove</button>';
-    el.appendChild(row);
-    document.querySelectorAll('.glRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.edit-row').remove(); }; });
+    var block = document.createElement('div');
+    block.className = 'gallery-block';
+    block.style.marginBottom = '18px';
+    block.innerHTML = '<div class="photo-field"></div><div class="edit-row edit-row--gallery"><input class="glLabel" placeholder="Label"><input class="glCategory" placeholder="Category"><input class="glImage" placeholder="Image URL (or upload above)"><button class="btn btn--ghost mini-btn glRemove" type="button">Remove</button></div>';
+    el.appendChild(block);
+    bindPhotoFieldToInput(block.querySelector('.photo-field'), block.querySelector('.glImage'), { outputW: 900, outputH: 675 });
+    document.querySelectorAll('.glRemove').forEach(function (btn) { btn.onclick = function () { btn.closest('.gallery-block').remove(); }; });
   };
   document.getElementById('saveContentBtn').onclick = function () {
     var testimonials = Array.prototype.map.call(document.querySelectorAll('#testimonialsEditor .edit-row'), function (row) {
