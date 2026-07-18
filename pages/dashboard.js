@@ -137,7 +137,12 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   }
   .cal-block:active { cursor:grabbing; }
   .cal-block.is-pending { border-style:dashed; opacity:0.88; }
-  .cal-block.is-dragging { z-index:500; box-shadow:0 10px 26px rgba(0,0,0,0.5); opacity:0.96; transition:left 0.08s ease, top 0.08s ease, width 0.08s ease; }
+  /* No transition here on purpose -- top/left/width are rewritten on every
+     single pointermove during a drag, and animating those changes fights
+     the live tracking (the block visibly lags/eases toward each new spot
+     instead of following the pointer 1:1). Position updates during a drag
+     need to be instant; only the drop-shadow/opacity are allowed to ease. */
+  .cal-block.is-dragging { z-index:500; box-shadow:0 10px 26px rgba(0,0,0,0.5); opacity:0.96; transition:box-shadow 0.15s ease, opacity 0.15s ease; }
   .cal-block.is-delete-armed { background:rgba(224,64,64,0.35) !important; border-color:#e04040 !important; }
   .cal-block__title { font-weight:600; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .cal-block__time { color:rgba(255,255,255,0.85); font-size:0.7rem; }
@@ -681,14 +686,20 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
 
         var wrapRect = targetWrap.getBoundingClientRect();
         var rawTop = ev.clientY - grabOffsetY - wrapRect.top;
-        var snapPx = CAL_SNAP_MIN * CAL_PX_PER_MIN;
-        var snappedTop = Math.max(0, Math.round(rawTop / snapPx) * snapPx);
-        snappedTop = Math.min(snappedTop, wrapRect.height - startRect.height);
-        lastSnappedTopMin = Math.round(snappedTop / CAL_PX_PER_MIN);
+        var clampedTop = Math.max(0, Math.min(rawTop, wrapRect.height - startRect.height));
+
+        // Visual position follows the pointer smoothly, pixel for pixel --
+        // snapping the *visual* position to 15-minute increments on every
+        // move event is what made this feel jumpy/wonky (the block hops
+        // instead of gliding). The 15-minute snap is still applied, just
+        // only to the underlying time value used once the drag ends, which
+        // is the only place it actually needs to be exact.
+        var snapMin = CAL_SNAP_MIN;
+        lastSnappedTopMin = Math.round((clampedTop / CAL_PX_PER_MIN) / snapMin) * snapMin;
 
         block.style.left = wrapRect.left + 'px';
         block.style.width = wrapRect.width + 'px';
-        block.style.top = (wrapRect.top + snappedTop) + 'px';
+        block.style.top = (wrapRect.top + clampedTop) + 'px';
       }
 
       function onUp() {
@@ -743,9 +754,11 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
           calDragState = { type: 'resize' };
           block.classList.add('is-dragging');
         }
+        // Smooth 1:1 visual follow, same reasoning as the move drag above
+        // -- only the final committed duration gets snapped to 15 minutes.
         var deltaY = ev.clientY - startClientY;
-        var snapPx = CAL_SNAP_MIN * CAL_PX_PER_MIN;
-        var newHeight = Math.max(snapPx, Math.round((startHeight + deltaY) / snapPx) * snapPx);
+        var minHeight = CAL_SNAP_MIN * CAL_PX_PER_MIN;
+        var newHeight = Math.max(minHeight, startHeight + deltaY);
         block.style.height = newHeight + 'px';
         var color = colorForDuration(Math.round(newHeight / CAL_PX_PER_MIN));
         block.style.background = color.fill;
@@ -754,7 +767,8 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
       function onUp() {
         cleanup();
         if (!engaged) return;
-        var newDurationMin = Math.round(parseFloat(block.style.height) / CAL_PX_PER_MIN);
+        var rawDurationMin = parseFloat(block.style.height) / CAL_PX_PER_MIN;
+        var newDurationMin = Math.max(CAL_SNAP_MIN, Math.round(rawDurationMin / CAL_SNAP_MIN) * CAL_SNAP_MIN);
         var origStartMs = new Date(block.dataset.start).getTime();
         var finalEndMs = origStartMs + newDurationMin * 60000;
         submitReschedule(block, new Date(origStartMs).toISOString(), new Date(finalEndMs).toISOString(), block.dataset.stylist ? Number(block.dataset.stylist) : null);
