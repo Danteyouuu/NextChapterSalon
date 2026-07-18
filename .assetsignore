@@ -1,0 +1,31 @@
+# Cloudflare Workers Static Assets upload — gitignore-style syntax.
+#
+# [assets] directory in wrangler.toml is "./" (project root) on purpose, so
+# that HTML references like /assets/theme.css resolve correctly (the URL
+# path has to match the file's path relative to that directory). But that
+# means wrangler's asset scanner would otherwise try to upload every file in
+# the whole project as a static asset -- including node_modules, which
+# contains platform binaries (workerd.exe, sharp) well over the 25 MiB
+# per-file limit. This file excludes everything that isn't meant to be
+# served as a static file; the actual Worker code (router.js, lib/, pages/,
+# api/, worker/) is bundled separately via esbuild through the `main` entry
+# point in wrangler.toml and is unaffected by this list.
+
+node_modules/
+.git/
+.wrangler/
+.wrangler-local-state/
+.dev.vars
+*.md
+schema.sql
+wrangler.toml
+package.json
+package-lock.json
+.gitignore
+.assetsignore
+worker/
+lib/
+pages/
+api/
+tests/
+router.js
