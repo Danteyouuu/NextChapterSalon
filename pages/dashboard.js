@@ -111,6 +111,13 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   .cropper-controls input[type="range"] { margin:0; width:100%; }
   .cropper-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 
+  /* ---- Generic modal (reused for the walk-in form; the photo cropper
+     above predates this and keeps its own near-identical classes rather
+     than risk touching working drag/zoom code) ---- */
+  .modal-overlay { position:fixed; inset:0; background:rgba(10,8,7,0.82); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .modal-panel { background:var(--bg-panel); border:1px solid var(--gold-dim); border-radius:8px; padding:28px; max-width:560px; width:100%; max-height:90vh; overflow-y:auto; }
+  @media (max-width: 640px) { .modal-panel { padding:20px; max-height:94vh; } }
+
   /* ---- Drag-and-drop day calendar (Calendar tab) ---- */
   .cal-scroll { overflow-x:auto; margin-top:16px; border:1px solid rgba(201,166,107,0.15); border-radius:8px; }
   .cal-grid { display:flex; min-width:100%; width:max-content; }
@@ -186,30 +193,35 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     <p class="text-dim" style="font-size:0.85rem;margin-top:8px;">Drag an appointment to move it to a new time or stylist. Drag the bottom edge to change its length. Dashed blocks are still pending review.</p>
     <div class="cal-scroll"><div class="cal-grid" id="calGrid"></div></div>
 
-    <div class="card card--framed" id="manualForm" style="display:none;margin-top:24px;">
-      <h4>New Manual Appointment</h4>
-      <p class="text-dim" style="font-size:0.88rem;">Confirmed immediately &mdash; no review needed since you're entering it yourself.</p>
-      <div class="field-row">
-        <div><label>Service</label><select id="manualService"></select></div>
-        <div><label>Stylist</label><select id="manualStylist"><option value="">No preference</option></select></div>
+    <div class="modal-overlay" id="manualModal" style="display:none;">
+      <div class="modal-panel" id="manualForm">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <h4 style="margin:0;">New Manual Appointment</h4>
+          <button class="btn btn--ghost mini-btn" id="manualCloseX" type="button" aria-label="Close">&times;</button>
+        </div>
+        <p class="text-dim" style="font-size:0.88rem;">Confirmed immediately &mdash; no review needed since you're entering it yourself.</p>
+        <div class="field-row">
+          <div><label>Service</label><select id="manualService"></select></div>
+          <div><label>Stylist</label><select id="manualStylist"><option value="">No preference</option></select></div>
+        </div>
+        <div class="field-row">
+          <div><label>Date</label><input id="manualDate" type="date" min="${todayLocalDate}"></div>
+          <div><label>Time</label><input id="manualTime" type="time"></div>
+        </div>
+        <label>Client Name</label>
+        <input id="manualName" placeholder="Walk-in">
+        <div class="field-row">
+          <div><label>Email (optional)</label><input id="manualEmail" type="email"></div>
+          <div><label>Phone (optional)</label><input id="manualPhone"></div>
+        </div>
+        <label>Notes</label>
+        <textarea id="manualNotes"></textarea>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn--gold" id="saveManualBtn">Add to Calendar</button>
+          <button class="btn btn--ghost" id="cancelManualBtn">Cancel</button>
+        </div>
+        <p id="manualMsg" style="margin-top:10px;font-size:0.9rem;"></p>
       </div>
-      <div class="field-row">
-        <div><label>Date</label><input id="manualDate" type="date" min="${todayLocalDate}"></div>
-        <div><label>Time</label><input id="manualTime" type="time"></div>
-      </div>
-      <label>Client Name</label>
-      <input id="manualName" placeholder="Walk-in">
-      <div class="field-row">
-        <div><label>Email (optional)</label><input id="manualEmail" type="email"></div>
-        <div><label>Phone (optional)</label><input id="manualPhone"></div>
-      </div>
-      <label>Notes</label>
-      <textarea id="manualNotes"></textarea>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn--gold" id="saveManualBtn">Add to Calendar</button>
-        <button class="btn btn--ghost" id="cancelManualBtn">Cancel</button>
-      </div>
-      <p id="manualMsg" style="margin-top:10px;font-size:0.9rem;"></p>
     </div>
   </section>
 
@@ -834,27 +846,41 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     render();
   }
 
-  // ---- Manual appointment ----
-  document.getElementById('openManualBtn').onclick = function () {
-    var form = document.getElementById('manualForm');
-    form.style.display = form.style.display === 'none' ? 'block' : 'none';
-    if (form.style.display === 'block') {
-      // Re-floor the date picker at "today" every time the form opens, in
-      // case this dashboard tab has been sitting open since before
-      // midnight — the server-rendered min="" only reflects page load time.
-      var tz = (DATA.settings && DATA.settings.timezone) || 'America/Chicago';
-      document.getElementById('manualDate').min = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
-      var svcSel = document.getElementById('manualService');
-      svcSel.innerHTML = (DATA.services || []).filter(function (s) { return s.active; }).map(function (s) {
-        return '<option value="' + s.id + '">' + escapeHtml(s.name) + ' (' + s.duration_minutes + ' min)</option>';
-      }).join('');
-      var stSel = document.getElementById('manualStylist');
-      stSel.innerHTML = '<option value="">No preference</option>' + (DATA.stylists || []).filter(function (s) { return s.active; }).map(function (s) {
-        return '<option value="' + s.id + '">' + escapeHtml(s.name) + '</option>';
-      }).join('');
-    }
-  };
-  document.getElementById('cancelManualBtn').onclick = function () { document.getElementById('manualForm').style.display = 'none'; };
+  // ---- Manual appointment (pops up over the calendar as a modal, same
+  // pattern as the photo cropper, rather than pushing the page's layout
+  // around) ----
+  function openManualModal() {
+    document.getElementById('manualModal').style.display = 'flex';
+    // Clear out anything left over from the last time this was opened.
+    ['manualDate', 'manualTime', 'manualName', 'manualEmail', 'manualPhone', 'manualNotes'].forEach(function (id) {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('manualMsg').textContent = '';
+    // Re-floor the date picker at "today" every time the form opens, in
+    // case this dashboard tab has been sitting open since before
+    // midnight — the server-rendered min="" only reflects page load time.
+    var tz = (DATA.settings && DATA.settings.timezone) || 'America/Chicago';
+    document.getElementById('manualDate').min = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+    var svcSel = document.getElementById('manualService');
+    svcSel.innerHTML = (DATA.services || []).filter(function (s) { return s.active; }).map(function (s) {
+      return '<option value="' + s.id + '">' + escapeHtml(s.name) + ' (' + s.duration_minutes + ' min)</option>';
+    }).join('');
+    var stSel = document.getElementById('manualStylist');
+    stSel.innerHTML = '<option value="">No preference</option>' + (DATA.stylists || []).filter(function (s) { return s.active; }).map(function (s) {
+      return '<option value="' + s.id + '">' + escapeHtml(s.name) + '</option>';
+    }).join('');
+  }
+  function closeManualModal() { document.getElementById('manualModal').style.display = 'none'; }
+
+  document.getElementById('openManualBtn').onclick = openManualModal;
+  document.getElementById('cancelManualBtn').onclick = closeManualModal;
+  document.getElementById('manualCloseX').onclick = closeManualModal;
+  document.getElementById('manualModal').addEventListener('click', function (e) {
+    if (e.target === this) closeManualModal(); // backdrop click
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.getElementById('manualModal').style.display !== 'none') closeManualModal();
+  });
   document.getElementById('saveManualBtn').onclick = function () {
     var date = document.getElementById('manualDate').value;
     var time = document.getElementById('manualTime').value;
@@ -875,7 +901,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
       }),
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (!res.ok) { document.getElementById('manualMsg').textContent = res.error || 'Something went wrong.'; return; }
-      document.getElementById('manualForm').style.display = 'none';
+      closeManualModal();
       loadData();
     });
   };
