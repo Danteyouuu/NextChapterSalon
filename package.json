@@ -7,7 +7,8 @@
     "dev": "wrangler dev --persist-to .wrangler-local-state",
     "d1:local": "wrangler d1 execute next-chapter-salon-db --local --persist-to .wrangler-local-state --file=schema.sql",
     "d1:remote": "wrangler d1 execute next-chapter-salon-db --remote --file=schema.sql",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "node --no-warnings tests/e2e.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.111.0"
