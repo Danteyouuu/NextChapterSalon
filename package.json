@@ -1,0 +1,15 @@
+{
+  "name": "next-chapter-salon",
+  "private": true,
+  "version": "1.0.0",
+  "description": "nextchaptersalon.com — standalone Cloudflare Worker (site + booking system)",
+  "scripts": {
+    "dev": "wrangler dev --persist-to .wrangler-local-state",
+    "d1:local": "wrangler d1 execute next-chapter-salon-db --local --persist-to .wrangler-local-state --file=schema.sql",
+    "d1:remote": "wrangler d1 execute next-chapter-salon-db --remote --file=schema.sql",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.111.0"
+  }
+}

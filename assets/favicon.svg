@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="8" fill="#0A0705"/>
+  <rect x="2" y="2" width="60" height="60" rx="6" fill="none" stroke="#8A5A22" stroke-width="1"/>
+  <text x="32" y="42" font-family="Georgia, 'Playfair Display', serif" font-size="30" font-weight="700"
+        text-anchor="middle" fill="#C9A66B">NC</text>
+</svg>

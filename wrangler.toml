@@ -1,0 +1,36 @@
+name = "next-chapter-salon"
+main = "worker/index.js"
+compatibility_date = "2026-07-18"
+compatibility_flags = ["nodejs_compat"]
+
+# Declared explicitly (not just set via the Cloudflare Dashboard) so a
+# deploy can't silently strip it — same reasoning as campbelldan.com's route
+# in the original project this was lifted out of. Two entries: the apex
+# domain and www both need their own [[routes]] block.
+[[routes]]
+pattern = "nextchaptersalon.com"
+zone_name = "nextchaptersalon.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.nextchaptersalon.com"
+zone_name = "nextchaptersalon.com"
+custom_domain = true
+
+[assets]
+directory = "./"
+binding = "ASSETS"
+
+# TODO: fill in database_id after creating the D1 database (Cloudflare
+# dashboard -> Workers & Pages -> D1 -> Create database, name it
+# next-chapter-salon-db). Until this has a real ID, `wrangler dev` and
+# `wrangler deploy` will fail on the D1 binding.
+[[d1_databases]]
+binding = "DB"
+database_name = "next-chapter-salon-db"
+database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+
+# Hourly sweep for the 23-25-hour-out appointment reminder emails — see
+# worker/index.js's scheduled() handler and lib/reminders.js.
+[triggers]
+crons = ["0 * * * *"]
