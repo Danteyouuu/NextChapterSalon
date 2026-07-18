@@ -227,6 +227,18 @@ p { margin: 0 0 1.1em; }
 .btn--block { width: 100%; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
 
+/* Long labels ("Request This Appointment", etc.) combined with the wide
+   0.14em letter-spacing above can run wider than a phone screen while
+   white-space stays nowrap, clipping letters off the edge of the button.
+   Tighten spacing/padding and allow wrapping as a fallback so nothing gets
+   cut off, however long the label. */
+@media (max-width: 480px) {
+  /* :not(.btn--sm) so this doesn't fight with .btn--sm's own (already
+     compact) sizing, or with the more specific .nav__cta .btn--sm rule
+     above — this is only meant for full-size buttons with long labels. */
+  .btn:not(.btn--sm) { padding: 14px 18px; font-size: 0.86rem; letter-spacing: 0.06em; white-space: normal; text-align: center; line-height: 1.35; }
+}
+
 /* -------------------------------------------------------------------- */
 /* Cards                                                                 */
 /* -------------------------------------------------------------------- */
