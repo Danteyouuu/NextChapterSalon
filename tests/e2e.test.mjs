@@ -422,6 +422,30 @@ await check("POST /api/manual-appointment allows a time earlier today (logging a
   assert(res.status === 200 && data.ok, "expected an earlier-today walk-in to be allowed: " + JSON.stringify(data));
 });
 
+await check("POST /api/manual-appointment allows a future time later today", async () => {
+  const res = await call("POST", "/api/manual-appointment", {
+    manageToken: MANAGE_TOKEN,
+    serviceId: 6,
+    customerName: "Later Today Leo",
+    customerEmail: "leo@example.com",
+    startAt: new Date(Date.now() + 3 * 3600000).toISOString(), // 3 hours from now, still today (unless run right around midnight)
+  });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "expected today (a few hours from now) to be allowed: " + JSON.stringify(data));
+});
+
+await check("POST /api/manual-appointment allows yesterday (1-day grace period)", async () => {
+  const res = await call("POST", "/api/manual-appointment", {
+    manageToken: MANAGE_TOKEN,
+    serviceId: 6,
+    customerName: "Grace Period Gina",
+    customerEmail: "gina@example.com",
+    startAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+  });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "expected yesterday to be allowed under the 1-day grace period: " + JSON.stringify(data));
+});
+
 console.log("=== Cancellation ===");
 await check("POST /api/cancel-appointment (customer self-service)", async () => {
   const res = await call("POST", "/api/cancel-appointment", { manageToken: customerManageToken });

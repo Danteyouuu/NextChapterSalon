@@ -13,7 +13,13 @@
 
 import { requireOwner } from "../lib/auth.js";
 import { getAppointmentById, rescheduleAppointment } from "../lib/db.js";
-import { utcToZonedParts } from "../lib/availability.js";
+import { utcToZonedParts, addDaysToDateStr } from "../lib/availability.js";
+
+// See api/manual-appointment.js for why this isn't a strict same-instant
+// comparison against the salon's timezone -- a 1-day grace period avoids
+// falsely rejecting a drag onto "today" depending on exactly where the
+// owner's device clock sits relative to the salon's configured timezone.
+const PAST_DATE_GRACE_DAYS = 1;
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -45,7 +51,7 @@ export async function onRequestPost(context) {
 
   const todayLocal = utcToZonedParts(new Date(), settings.timezone).date;
   const requestedLocal = utcToZonedParts(startDate, settings.timezone).date;
-  if (requestedLocal < todayLocal) {
+  if (requestedLocal < addDaysToDateStr(todayLocal, -PAST_DATE_GRACE_DAYS)) {
     return json({ ok: false, error: "Can't move an appointment to a past date." }, 400);
   }
 

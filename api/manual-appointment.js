@@ -3,14 +3,22 @@
 // 'confirmed' — bypasses the public request/approval queue since the owner
 // is entering it themselves.
 //
-// Blocks past *dates* (compared in the salon's own timezone, not UTC or the
-// owner's device clock) but not past *times* on today -- a walk-in that
+// Blocks past *dates* but not past *times* on today -- a walk-in that
 // started 10 minutes ago and is being logged right now is a legitimate,
-// common case, not a bug.
+// common case, not a bug. The date check allows a 1-day grace period (see
+// PAST_DATE_GRACE_DAYS below) rather than comparing strictly against the
+// salon's configured timezone -- a strict same-instant comparison was
+// occasionally rejecting "today" itself depending on exactly where the
+// owner's device clock sat relative to the salon's configured timezone at
+// the moment of submission. One day of slack on an owner-only tool is a
+// non-issue; a hard rejection of a legitimate walk-in someone is standing
+// in front of you trying to log is a real one.
 
 import { requireOwner } from "../lib/auth.js";
 import { getServiceById, createManualAppointment } from "../lib/db.js";
-import { utcToZonedParts } from "../lib/availability.js";
+import { utcToZonedParts, addDaysToDateStr } from "../lib/availability.js";
+
+const PAST_DATE_GRACE_DAYS = 1;
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -42,7 +50,7 @@ export async function onRequestPost(context) {
 
   const todayLocal = utcToZonedParts(new Date(), settings.timezone).date;
   const requestedLocal = utcToZonedParts(startDate, settings.timezone).date;
-  if (requestedLocal < todayLocal) {
+  if (requestedLocal < addDaysToDateStr(todayLocal, -PAST_DATE_GRACE_DAYS)) {
     return json({ ok: false, error: "Can't add an appointment on a past date." }, 400);
   }
 

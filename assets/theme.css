@@ -489,6 +489,23 @@ input:focus, select:focus, textarea:focus {
 textarea { resize: vertical; min-height: 120px; }
 ::placeholder { color: var(--cream-faint); }
 
+/* Chrome/Edge/Firefox render the date/time picker icon as solid black by
+   default -- on this dark theme that makes it functionally invisible
+   against the input's dark background. Not a "can't select a time" bug so
+   much as a "can't see the control that opens the picker" bug -- invert it
+   so it's visible (light) instead. Mobile's native OS picker isn't
+   affected since it's a different UI entirely, which is why this only
+   showed up on desktop. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.9);
+  cursor: pointer;
+  border-radius: 4px;
+}
+/* Firefox doesn't support ::-webkit-calendar-picker-indicator, but its
+   built-in date/time widget already respects the input's own color, so no
+   equivalent fix is needed there. */
+
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 640px) { .field-row { grid-template-columns: 1fr; } }
 

@@ -24,7 +24,11 @@
 // requests are allowed on purpose. See schema.sql for the full reasoning.
 
 import { getSettings, getServiceById, listAvailabilityRules, listBlockedDates, createAppointment, findOverlapping } from "../lib/db.js";
-import { generateSlotsWithOverlapInfo, zonedTimeToUtc, utcToZonedParts } from "../lib/availability.js";
+import { generateSlotsWithOverlapInfo, zonedTimeToUtc, utcToZonedParts, addDaysToDateStr } from "../lib/availability.js";
+
+// See api/manual-appointment.js for the reasoning -- a 1-day grace period
+// avoids falsely rejecting "today" over a timezone-configuration edge case.
+const PAST_DATE_GRACE_DAYS = 1;
 import { sendBookingEmail, escapeHtml } from "../lib/email.js";
 import { buildSingleEventIcs } from "../lib/ics.js";
 import { getOrigin } from "../lib/http.js";
@@ -69,7 +73,7 @@ export async function onRequestPost(context) {
       return json({ ok: false, error: "That doesn't look like a valid date." }, 400);
     }
     const todayLocal = utcToZonedParts(new Date(), settings.timezone).date;
-    if (requestedDate < todayLocal) {
+    if (requestedDate < addDaysToDateStr(todayLocal, -PAST_DATE_GRACE_DAYS)) {
       return json({ ok: false, error: "That date has already passed, please pick another." }, 400);
     }
     const weekday = new Date(`${requestedDate}T12:00:00Z`).getUTCDay();
