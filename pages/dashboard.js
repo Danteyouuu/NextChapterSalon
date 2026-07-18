@@ -137,10 +137,17 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   }
   .cal-block:active { cursor:grabbing; }
   .cal-block.is-pending { border-style:dashed; opacity:0.88; }
-  .cal-block.is-dragging { z-index:10; box-shadow:0 6px 16px rgba(0,0,0,0.4); }
+  .cal-block.is-dragging { z-index:500; box-shadow:0 10px 26px rgba(0,0,0,0.5); opacity:0.96; transition:left 0.08s ease, top 0.08s ease, width 0.08s ease; }
+  .cal-block.is-delete-armed { background:rgba(224,64,64,0.35) !important; border-color:#e04040 !important; }
   .cal-block__title { font-weight:600; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .cal-block__time { color:rgba(255,255,255,0.85); font-size:0.7rem; }
-  .cal-resize { position:absolute; left:0; right:0; bottom:0; height:8px; cursor:ns-resize; }
+  .cal-block__delete-hint { position:absolute; inset:0; display:none; align-items:center; justify-content:center; font-family:var(--font-label); text-transform:uppercase; letter-spacing:0.08em; font-size:0.72rem; color:#fff; background:rgba(224,64,64,0.55); border-radius:5px; }
+  .cal-block.is-delete-armed .cal-block__delete-hint { display:flex; }
+  /* Real hit target is taller than it looks (the visible grip is just a
+     hint) -- negative margin extends it without affecting layout height. */
+  .cal-resize { position:absolute; left:0; right:0; bottom:-6px; height:20px; cursor:ns-resize; display:flex; align-items:flex-end; justify-content:center; padding-bottom:3px; touch-action:none; }
+  .cal-resize::after { content:''; width:28px; height:4px; border-radius:2px; background:rgba(255,255,255,0.55); }
+  .cal-col--drop-target { background-color:rgba(201,166,107,0.07); }
   .cal-empty { padding:40px 20px; text-align:center; color:var(--cream-faint); }
 
   @media (max-width: 640px) {
@@ -450,6 +457,49 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     return { border: 'hsl(' + hue + ',70%,50%)', fill: 'hsla(' + hue + ',70%,50%,0.22)' };
   }
 
+  // Appointments that overlap in time (allowed on purpose, see
+  // lib/availability.js) now render side by side within their column
+  // instead of stacked exactly on top of each other. Standard day-view
+  // layout: group appointments into clusters of mutually-overlapping time
+  // (transitively -- A overlapping B and B overlapping C puts all three in
+  // one cluster even if A and C don't directly overlap), then greedily
+  // pack each cluster into the fewest lanes, reusing a lane as soon as
+  // it's free. Returns { [appointmentId]: { index, total } }.
+  function layoutLanes(appointments, tz) {
+    var items = appointments.map(function (a) {
+      var s = localMinutesOfDay(a.start_at, tz);
+      var e = s + Math.max(5, Math.round((new Date(a.end_at) - new Date(a.start_at)) / 60000));
+      return { a: a, s: s, e: e };
+    }).sort(function (x, y) { return x.s - y.s || x.e - y.e; });
+
+    var clusters = [];
+    items.forEach(function (it) {
+      var cluster = clusters.length ? clusters[clusters.length - 1] : null;
+      if (cluster && it.s < cluster.end) {
+        cluster.items.push(it);
+        cluster.end = Math.max(cluster.end, it.e);
+      } else {
+        clusters.push({ items: [it], end: it.e });
+      }
+    });
+
+    var layout = {};
+    clusters.forEach(function (cluster) {
+      var laneEnds = [];
+      cluster.items.forEach(function (it) {
+        var laneIdx = -1;
+        for (var i = 0; i < laneEnds.length; i++) {
+          if (laneEnds[i] <= it.s) { laneIdx = i; break; }
+        }
+        if (laneIdx === -1) { laneIdx = laneEnds.length; laneEnds.push(0); }
+        laneEnds[laneIdx] = it.e;
+        layout[it.a.id] = { index: laneIdx };
+      });
+      cluster.items.forEach(function (it) { layout[it.a.id].total = laneEnds.length; });
+    });
+    return layout;
+  }
+
   function renderCalendarLabel() {
     var tz = (DATA.settings && DATA.settings.timezone) || 'America/Chicago';
     var isToday = calDate === todayInTz(tz);
@@ -497,20 +547,29 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     axisHtml += '</div>';
 
     var colsHtml = columns.map(function (col) {
-      var blocksHtml = dayAppts.filter(function (a) {
+      var colAppts = dayAppts.filter(function (a) {
         return col.id === null ? (!a.stylist_id || !activeStylists.some(function (s) { return s.id === a.stylist_id; })) : a.stylist_id === col.id;
-      }).map(function (a) {
+      });
+      var lanes = layoutLanes(colAppts, tz);
+
+      var blocksHtml = colAppts.map(function (a) {
         var s = localMinutesOfDay(a.start_at, tz);
         var durMin = Math.max(5, Math.round((new Date(a.end_at) - new Date(a.start_at)) / 60000));
         var top = (s - startMin) * CAL_PX_PER_MIN;
         var height = Math.max(18, durMin * CAL_PX_PER_MIN);
         var color = colorForDuration(durMin);
         var timeLabel = new Date(a.start_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+        var lane = lanes[a.id] || { index: 0, total: 1 };
+        var laneWidthPct = 100 / lane.total;
+        var posStyle = lane.total > 1
+          ? 'left:calc(' + (lane.index * laneWidthPct) + '% + 3px);right:auto;width:calc(' + laneWidthPct + '% - 6px);'
+          : '';
         return '<div class="cal-block' + (a.status === 'pending_review' ? ' is-pending' : '') + '" data-id="' + a.id +
           '" data-start="' + a.start_at + '" data-end="' + a.end_at + '" data-stylist="' + (a.stylist_id || '') +
-          '" style="top:' + top + 'px;height:' + height + 'px;background:' + color.fill + ';border-color:' + color.border + ';">' +
+          '" style="top:' + top + 'px;height:' + height + 'px;background:' + color.fill + ';border-color:' + color.border + ';' + posStyle + '">' +
           '<div class="cal-block__title">' + escapeHtml(a.customer_name) + '</div>' +
           '<div class="cal-block__time">' + timeLabel + ' &middot; ' + escapeHtml(a.service_name) + '</div>' +
+          '<div class="cal-block__delete-hint">Release to Delete</div>' +
           '<div class="cal-resize"></div>' +
         '</div>';
       }).join('');
@@ -530,96 +589,171 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     return h12 + (minutes % 60 ? ':' + pad2(minutes % 60) : '') + suffix;
   }
 
-  function bindCalendarDrag(startMin, columns) {
-    var bodyWraps = document.querySelectorAll('.cal-body-wrap');
+  // Drag design notes (rewritten after the first version turned out fragile
+  // in practice):
+  // - Listeners for move/up live on the document, not on the block itself.
+  //   The original version used setPointerCapture() on the block and
+  //   reparented it between columns mid-drag (appendChild into whichever
+  //   column the pointer was over) -- reparenting an element that holds
+  //   pointer capture isn't reliably preserved across browsers, which is
+  //   very likely why dragging felt broken/unresponsive. Document-level
+  //   listeners don't care what the target element is doing.
+  // - The dragged block switches to position:fixed and is moved to be a
+  //   direct child of <body> for the duration of the drag, then the whole
+  //   calendar is re-rendered from fresh data on drop (success or
+  //   failure/cancel) rather than trying to patch the DOM back together --
+  //   simpler and can't end up in a half-moved state.
+  // - It visually snaps to whichever column is under the pointer and to
+  //   the nearest 15-minute line as you drag, rather than free-following
+  //   the cursor -- clearer feedback about where it'll actually land.
+  // - A small movement threshold before "engaging" the drag means an
+  //   ordinary click doesn't fire a pointless zero-delta reschedule call.
+  // - Dragging predominantly right past a threshold arms delete instead of
+  //   move; releasing there asks for confirmation.
+  var DRAG_ENGAGE_PX = 6;
+  var DELETE_ARM_PX = 110;
 
+  function bindCalendarDrag(startMin, columns) {
     document.querySelectorAll('.cal-block').forEach(function (block) {
       block.querySelector('.cal-resize').addEventListener('pointerdown', function (e) {
+        e.preventDefault();
         e.stopPropagation();
         startResize(block, e);
       });
       block.addEventListener('pointerdown', function (e) {
-        if (e.target.classList.contains('cal-resize')) return;
+        if (e.target.closest('.cal-resize')) return;
         startMove(block, e);
       });
     });
 
-    function startMove(block, e) {
-      var originalTop = parseFloat(block.style.top);
-      var originalLeftWrap = block.closest('.cal-body-wrap');
-      var startClientY = e.clientY, startClientX = e.clientX;
-      calDragState = { type: 'move', block: block, originalTop: originalTop, originalWrap: originalLeftWrap };
-      block.classList.add('is-dragging');
-      block.setPointerCapture(e.pointerId);
+    function startMove(block, downEvent) {
+      var homeWrap = block.parentElement;
+      var startRect = block.getBoundingClientRect();
+      var grabOffsetX = downEvent.clientX - startRect.left;
+      var grabOffsetY = downEvent.clientY - startRect.top;
+      var startClientX = downEvent.clientX, startClientY = downEvent.clientY;
+      var engaged = false;
+      var lastColWrap = homeWrap;
+      var lastSnappedTopMin = Math.round(parseFloat(block.style.top) / CAL_PX_PER_MIN);
+      var homeTopMin = lastSnappedTopMin;
+      var deleteArmed = false;
 
-      block.addEventListener('pointermove', onMove);
-      block.addEventListener('pointerup', onUp);
-      block.addEventListener('pointercancel', onCancel);
+      function engage() {
+        engaged = true;
+        calDragState = { type: 'move' };
+        block.classList.add('is-dragging');
+        block.style.position = 'fixed';
+        block.style.width = startRect.width + 'px';
+        block.style.height = startRect.height + 'px';
+        block.style.left = startRect.left + 'px';
+        block.style.top = startRect.top + 'px';
+        block.style.right = 'auto';
+        document.body.appendChild(block);
+      }
 
       function onMove(ev) {
-        var deltaY = ev.clientY - startClientY;
-        var snapped = Math.round((originalTop + deltaY) / (CAL_SNAP_MIN * CAL_PX_PER_MIN)) * (CAL_SNAP_MIN * CAL_PX_PER_MIN);
-        block.style.top = Math.max(0, snapped) + 'px';
+        var dx = ev.clientX - startClientX, dy = ev.clientY - startClientY;
+        if (!engaged) {
+          if (Math.abs(dx) < DRAG_ENGAGE_PX && Math.abs(dy) < DRAG_ENGAGE_PX) return;
+          engage();
+        }
 
-        // Figure out which column the pointer is currently over, and if
-        // it's different from where the block started, visually move it
-        // there by reparenting -- keeps left/width correct via CSS instead
-        // of tracking pixel offsets across columns manually.
-        var overWrap = null;
-        bodyWraps.forEach(function (w) {
+        deleteArmed = dx > DELETE_ARM_PX && dx > Math.abs(dy) * 1.4;
+        block.classList.toggle('is-delete-armed', deleteArmed);
+
+        document.querySelectorAll('.cal-col--drop-target').forEach(function (c) { c.classList.remove('cal-col--drop-target'); });
+
+        if (deleteArmed) {
+          // Follow the cursor loosely while armed to delete -- no column
+          // snapping, it reads more like "drag it away" than "drag it here".
+          block.style.left = (ev.clientX - grabOffsetX) + 'px';
+          block.style.top = (ev.clientY - grabOffsetY) + 'px';
+          return;
+        }
+
+        var targetWrap = homeWrap;
+        document.querySelectorAll('.cal-body-wrap').forEach(function (w) {
           var r = w.getBoundingClientRect();
-          if (ev.clientX >= r.left && ev.clientX <= r.right) overWrap = w;
+          if (ev.clientX >= r.left && ev.clientX <= r.right) targetWrap = w;
         });
-        if (overWrap && overWrap !== block.parentElement) overWrap.appendChild(block);
+        lastColWrap = targetWrap;
+        targetWrap.closest('.cal-col').classList.add('cal-col--drop-target');
+
+        var wrapRect = targetWrap.getBoundingClientRect();
+        var rawTop = ev.clientY - grabOffsetY - wrapRect.top;
+        var snapPx = CAL_SNAP_MIN * CAL_PX_PER_MIN;
+        var snappedTop = Math.max(0, Math.round(rawTop / snapPx) * snapPx);
+        snappedTop = Math.min(snappedTop, wrapRect.height - startRect.height);
+        lastSnappedTopMin = Math.round(snappedTop / CAL_PX_PER_MIN);
+
+        block.style.left = wrapRect.left + 'px';
+        block.style.width = wrapRect.width + 'px';
+        block.style.top = (wrapRect.top + snappedTop) + 'px';
       }
-      function onUp(ev) {
+
+      function onUp() {
         cleanup();
-        // Shift the original instant by the same minute-delta the block
-        // visually moved -- correct regardless of timezone, since a wall-
-        // clock-minute delta on the same calendar day equals the same
-        // millisecond delta in UTC.
+        if (!engaged) return; // plain click/tap -- nothing to do
+
+        if (deleteArmed) {
+          confirmDelete(block);
+          return;
+        }
+
+        var shiftMin = lastSnappedTopMin - homeTopMin;
         var origStartMs = new Date(block.dataset.start).getTime();
         var origEndMs = new Date(block.dataset.end).getTime();
-        var durationMs = origEndMs - origStartMs;
-        var origTopMin = Math.round(originalTop / CAL_PX_PER_MIN);
-        var newTopMin = Math.round(parseFloat(block.style.top) / CAL_PX_PER_MIN);
-        var shiftMin = newTopMin - origTopMin;
         var finalStartMs = origStartMs + shiftMin * 60000;
-        var finalEndMs = finalStartMs + durationMs;
-        var newColId = block.parentElement.dataset.colId;
+        var finalEndMs = finalStartMs + (origEndMs - origStartMs);
+        var newColId = lastColWrap.dataset.colId;
         submitReschedule(block, new Date(finalStartMs).toISOString(), new Date(finalEndMs).toISOString(), newColId === '' ? null : Number(newColId));
       }
+
       function onCancel() { cleanup(); renderCalendar(); }
+
       function cleanup() {
-        block.classList.remove('is-dragging');
-        block.removeEventListener('pointermove', onMove);
-        block.removeEventListener('pointerup', onUp);
-        block.removeEventListener('pointercancel', onCancel);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onCancel);
+        document.querySelectorAll('.cal-col--drop-target').forEach(function (c) { c.classList.remove('cal-col--drop-target'); });
         calDragState = null;
+        // The block was reparented to <body> while floating (engage()) --
+        // every code path from here on triggers a full renderCalendar()
+        // (directly, or via loadData() after the server call resolves),
+        // which only rebuilds #calGrid's contents. Without this, the
+        // floating copy would be orphaned outside #calGrid and left
+        // visible on screen as a stale duplicate after the real re-render.
+        if (engaged && block.parentElement === document.body) block.parentElement.removeChild(block);
       }
+
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
     }
 
-    function startResize(block, e) {
-      var originalHeight = parseFloat(block.style.height);
-      var startClientY = e.clientY;
-      block.classList.add('is-dragging');
-      block.setPointerCapture(e.pointerId);
-      block.addEventListener('pointermove', onMove);
-      block.addEventListener('pointerup', onUp);
-      block.addEventListener('pointercancel', onCancel);
+    function startResize(block, downEvent) {
+      var startHeight = block.getBoundingClientRect().height;
+      var startClientY = downEvent.clientY;
+      var engaged = false;
 
       function onMove(ev) {
+        if (!engaged) {
+          if (Math.abs(ev.clientY - startClientY) < DRAG_ENGAGE_PX) return;
+          engaged = true;
+          calDragState = { type: 'resize' };
+          block.classList.add('is-dragging');
+        }
         var deltaY = ev.clientY - startClientY;
         var snapPx = CAL_SNAP_MIN * CAL_PX_PER_MIN;
-        var newHeight = Math.max(snapPx, Math.round((originalHeight + deltaY) / snapPx) * snapPx);
+        var newHeight = Math.max(snapPx, Math.round((startHeight + deltaY) / snapPx) * snapPx);
         block.style.height = newHeight + 'px';
-        var newDurationMin = Math.round(newHeight / CAL_PX_PER_MIN);
-        var color = colorForDuration(newDurationMin);
+        var color = colorForDuration(Math.round(newHeight / CAL_PX_PER_MIN));
         block.style.background = color.fill;
         block.style.borderColor = color.border;
       }
       function onUp() {
         cleanup();
+        if (!engaged) return;
         var newDurationMin = Math.round(parseFloat(block.style.height) / CAL_PX_PER_MIN);
         var origStartMs = new Date(block.dataset.start).getTime();
         var finalEndMs = origStartMs + newDurationMin * 60000;
@@ -627,11 +761,33 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
       }
       function onCancel() { cleanup(); renderCalendar(); }
       function cleanup() {
-        block.classList.remove('is-dragging');
-        block.removeEventListener('pointermove', onMove);
-        block.removeEventListener('pointerup', onUp);
-        block.removeEventListener('pointercancel', onCancel);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onCancel);
+        calDragState = null;
       }
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onCancel);
+    }
+  }
+
+  function confirmDelete(block) {
+    var name = block.querySelector('.cal-block__title').textContent;
+    if (window.confirm('Remove ' + name + '’s appointment? This can’t be undone from here.')) {
+      fetch('/api/delete-appointment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manageToken: MANAGE_TOKEN, appointmentId: Number(block.dataset.id) }),
+      }).then(function (r) { return r.json(); }).then(function (res) {
+        if (!res.ok) alert(res.error || "Couldn't delete that appointment.");
+        loadData();
+      }).catch(function () {
+        alert("Couldn't delete that appointment. Please try again.");
+        loadData();
+      });
+    } else {
+      renderCalendar();
     }
   }
 

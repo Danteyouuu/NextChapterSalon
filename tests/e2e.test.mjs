@@ -341,6 +341,36 @@ await check("POST /api/reschedule-appointment with wrong owner token -> 401", as
   assert(res.status === 401, `expected 401, got ${res.status}`);
 });
 
+console.log("=== Delete from calendar (swipe-right gesture backend) ===");
+
+await check("POST /api/delete-appointment with wrong owner token -> 401", async () => {
+  const res = await call("POST", "/api/delete-appointment", { manageToken: "WRONG", appointmentId: dayOnlyAppointmentId });
+  assert(res.status === 401, `expected 401, got ${res.status}`);
+});
+
+await check("POST /api/delete-appointment marks it canceled and removes it from the calendar", async () => {
+  const res = await call("POST", "/api/delete-appointment", { manageToken: MANAGE_TOKEN, appointmentId: dayOnlyAppointmentId });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "delete-appointment not ok: " + JSON.stringify(data));
+  assert(data.appointment.status === "canceled", "expected status canceled, got: " + data.appointment.status);
+
+  const dash = await call("GET", `/api/dashboard-data?manageToken=${MANAGE_TOKEN}`);
+  const dashData = await dash.json();
+  const stillThere = dashData.pending.concat(dashData.upcoming).find((a) => a.id === dayOnlyAppointmentId);
+  assert(!stillThere, "deleted appointment should no longer appear in pending/upcoming");
+});
+
+await check("POST /api/delete-appointment on an already-deleted appointment is idempotent", async () => {
+  const res = await call("POST", "/api/delete-appointment", { manageToken: MANAGE_TOKEN, appointmentId: dayOnlyAppointmentId });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "expected idempotent ok, got: " + JSON.stringify(data));
+});
+
+await check("POST /api/delete-appointment on a nonexistent id -> 404", async () => {
+  const res = await call("POST", "/api/delete-appointment", { manageToken: MANAGE_TOKEN, appointmentId: 999999 });
+  assert(res.status === 404, `expected 404, got ${res.status}`);
+});
+
 async function getAppointmentSnapshot(id) {
   const dash = await call("GET", `/api/dashboard-data?manageToken=${MANAGE_TOKEN}`);
   const dashData = await dash.json();
