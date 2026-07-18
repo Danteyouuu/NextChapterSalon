@@ -28,7 +28,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "next-chapter-salon-db"
-database_id = "REPLACE_WITH_REAL_D1_DATABASE_ID"
+database_id = "3f9fba06-63e6-461c-9c55-297d35c2fe12"
 
 # Hourly sweep for the 23-25-hour-out appointment reminder emails — see
 # worker/index.js's scheduled() handler and lib/reminders.js.
