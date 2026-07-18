@@ -20,7 +20,7 @@ ${renderNav("/gallery")}
   <div class="wrap">
     <span class="eyebrow">Gallery</span>
     <h1>A Look Inside</h1>
-    <p class="lede center">Real transformations are added here as they happen &mdash; this gallery grows with every chapter. Tiles below marked &ldquo;coming soon&rdquo; are reserved for photography.</p>
+    <p class="lede center">Real transformations get added here as they happen, so this gallery grows with every chapter. Tiles marked &ldquo;coming soon&rdquo; below are reserved for photography.</p>
   </div>
 </header>
 
@@ -44,7 +44,7 @@ ${renderNav("/gallery")}
   <div class="wrap">
     <span class="eyebrow reveal">Follow Along</span>
     <h2 class="reveal">More on Instagram</h2>
-    <p class="lede center reveal">The freshest work is posted daily &mdash; link your handle here once your account is ready.</p>
+    <p class="lede center reveal">The freshest work gets posted daily. Link your handle here once your account is ready.</p>
     <div class="hero__actions reveal">
       <a class="btn btn--gold" href="/booking">Book Your Look</a>
     </div>

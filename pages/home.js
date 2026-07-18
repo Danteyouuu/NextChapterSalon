@@ -30,7 +30,7 @@ ${renderNav("/")}
     <div class="hero__logo reveal">
       <img src="/assets/logo-hero.webp" alt="Next Chapter Salon">
     </div>
-    <p class="lede reveal">${escapeHtml(settings?.tagline || "Every Ending Is a Beautiful Beginning")}. A private studio where color, cuts, and care are written one chapter at a time &mdash; for you.</p>
+    <p class="lede reveal">${escapeHtml(settings?.tagline || "Every Ending Is a Beautiful Beginning")}. A private studio where color, cuts, and care are written one chapter at a time, just for you.</p>
     <div class="hero__actions reveal">
       <a class="btn btn--gold" href="/booking">Reserve Your Chapter</a>
       <a class="btn btn--ghost" href="/services">View the Menu</a>
@@ -49,7 +49,7 @@ ${renderNav("/")}
       <div class="card card--framed reveal">
         <span class="eyebrow" style="margin-bottom:18px;">Chapter I</span>
         <h3>The Consultation</h3>
-        <p class="text-dim">Every story starts with listening. We sit down together &mdash; no rush, no assumptions &mdash; to understand exactly where you are, and where you want to go.</p>
+        <p class="text-dim">Every story starts with listening. We sit down together, without rushing or assuming, to understand where you are and where you want to go.</p>
       </div>
       <div class="card card--framed reveal">
         <span class="eyebrow" style="margin-bottom:18px;">Chapter II</span>
@@ -59,7 +59,7 @@ ${renderNav("/")}
       <div class="card card--framed reveal">
         <span class="eyebrow" style="margin-bottom:18px;">Chapter III</span>
         <h3>The Reveal</h3>
-        <p class="text-dim">The finish is never rushed. You leave not just styled, but seen &mdash; ready for whatever the next chapter holds.</p>
+        <p class="text-dim">The finish is never rushed. You leave styled and seen, ready for whatever comes next.</p>
       </div>
     </div>
   </div>
@@ -99,7 +99,7 @@ ${renderNav("/")}
       <div class="reveal">
         <span class="eyebrow">Our Story</span>
         <h2>Every Ending Is a Beautiful Beginning</h2>
-        <p class="text-dim">Next Chapter Salon was founded on a simple belief: a haircut is never just a haircut. It's a punctuation mark &mdash; the close of one chapter, the opening line of the next. Our studio is built like a well-loved library: warm, unhurried, and entirely yours for the hour.</p>
+        <p class="text-dim">Next Chapter Salon was founded on a simple belief: a good haircut can mark something bigger, closing one chapter and opening the next. Our studio is built like a well-loved library, warm, unhurried, and entirely yours for the hour.</p>
         <a class="btn btn--ghost btn--sm" href="/about" style="margin-top:8px;">Read Our Story</a>
       </div>
       <div class="reveal">
@@ -151,7 +151,7 @@ ${renderNav("/")}
   <div class="wrap">
     <span class="eyebrow reveal">Begin</span>
     <h2 class="reveal">Your Next Chapter Is One Appointment Away</h2>
-    <p class="lede center reveal">Requests are reviewed personally &mdash; not auto-confirmed &mdash; so we can give every visit the attention it deserves.</p>
+    <p class="lede center reveal">Every request gets reviewed personally, not auto-confirmed, so we can give each visit the attention it deserves.</p>
     <div class="hero__actions reveal">
       <a class="btn btn--gold" href="/booking">Reserve Your Chapter</a>
       <a class="btn btn--ghost" href="/contact">Ask a Question</a>

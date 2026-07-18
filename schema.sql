@@ -192,11 +192,11 @@ INSERT OR IGNORE INTO ncs_services (category_id, name, description, duration_min
   (5, 'Wedding Day Styling', 'On-site or in-studio styling for your big day.', 120, 25000, 1, 0, 2);
 
 INSERT OR IGNORE INTO ncs_stylists (id, name, title, bio, sort_order) VALUES
-  (1, 'Owner Name', 'Founder & Master Stylist', 'With over a decade behind the chair, our founder built Next Chapter Salon around a simple idea: every appointment should feel like the start of something good. Replace this bio from the owner dashboard.', 1),
-  (2, 'Stylist Name', 'Colorist', 'Placeholder bio — add each stylist''s specialty, training, and personality from the dashboard once your team is set up.', 2);
+  (1, 'Owner Name', 'Founder & Master Stylist', 'With over a decade behind the chair, our founder built Next Chapter Salon around one idea: every appointment should feel like a fresh start. Replace this bio from the owner dashboard.', 1),
+  (2, 'Stylist Name', 'Colorist', 'Placeholder bio. Add each stylist''s specialty, training, and personality from the dashboard once your team is set up.', 2);
 
 INSERT OR IGNORE INTO ncs_testimonials (id, client_name, quote, rating, service_name, sort_order) VALUES
-  (1, 'A. Whitfield', 'Walking in felt like stepping into a novel — walking out, I felt like the main character. Best color I''ve ever had.', 5, 'Signature Balayage', 1),
+  (1, 'A. Whitfield', 'Walking in felt like stepping into a novel. Walking out, I felt like the main character. Best color I''ve ever had.', 5, 'Signature Balayage', 1),
   (2, 'M. Torres', 'They actually listen. My cut has never grown out this well before.', 5, 'Signature Haircut & Style', 2),
   (3, 'R. Chen', 'Worth every minute of the drive. The whole experience feels genuinely luxurious, not just the price tag.', 5, 'Color Correction', 3);
 

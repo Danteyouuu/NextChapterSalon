@@ -48,7 +48,7 @@ ${renderNav("/team")}
   <div class="wrap">
     <span class="eyebrow reveal">No Preference?</span>
     <h2 class="reveal">We'll Match You Perfectly</h2>
-    <p class="lede center reveal">Not sure who to choose? Leave it to us &mdash; every stylist trains to the same standard.</p>
+    <p class="lede center reveal">Not sure who to choose? Leave it to us. Every stylist trains to the same standard.</p>
     <div class="hero__actions reveal">
       <a class="btn btn--gold" href="/booking">Reserve Your Chapter</a>
     </div>

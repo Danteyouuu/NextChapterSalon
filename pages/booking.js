@@ -35,7 +35,7 @@ ${renderNav("/booking")}
   <div class="wrap">
     <span class="eyebrow">Reserve Your Time</span>
     <h1>Book an Appointment</h1>
-    <p class="lede center">Every request is reviewed personally &mdash; you'll hear back with a confirmation, usually within a day.</p>
+    <p class="lede center">Every request gets a personal review, and you'll hear back with a confirmation, usually within a day.</p>
   </div>
 </header>
 

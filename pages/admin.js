@@ -43,7 +43,7 @@ ${renderHead({ title: isFirstTime ? "Set Up Admin Access" : "Admin Login", path:
       <h1 style="font-size:1.7rem;margin:6px 0 6px;">${isFirstTime ? "Create Your Admin Password" : "Admin Login"}</h1>
       <p class="text-dim" style="margin-bottom:24px;">${
         isFirstTime
-          ? "No password has been set for this dashboard yet. Choose one now — you'll use it every time you visit this page."
+          ? "No password has been set for this dashboard yet. Choose one now. You'll use it every time you visit this page."
           : "Enter your password to continue to the dashboard."
       }</p>
       <form id="loginForm">

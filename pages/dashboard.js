@@ -190,7 +190,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
 
   <section class="tab-panel active" data-panel="requests">
     <h3>Pending Requests</h3>
-    <p class="text-dim">Every booking waits here until you accept or decline it. Overlapping requests are flagged, not blocked &mdash; you decide if it's a real conflict or a good downtime match.</p>
+    <p class="text-dim">Every booking waits here until you accept or decline it. Overlapping requests get flagged, not blocked, so you can decide whether it's a real conflict or a good downtime match.</p>
     <div id="pendingList"></div>
   </section>
 
@@ -213,7 +213,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
           <h4 style="margin:0;">New Manual Appointment</h4>
           <button class="btn btn--ghost mini-btn" id="manualCloseX" type="button" aria-label="Close">&times;</button>
         </div>
-        <p class="text-dim" style="font-size:0.88rem;">Confirmed immediately &mdash; no review needed since you're entering it yourself.</p>
+        <p class="text-dim" style="font-size:0.88rem;">Confirmed immediately. No review needed since you're entering it yourself.</p>
         <div class="field-row">
           <div><label>Service</label><select id="manualService"></select></div>
           <div><label>Stylist</label><select id="manualStylist"><option value="">No preference</option></select></div>
@@ -241,13 +241,13 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
 
   <section class="tab-panel" data-panel="clients">
     <h3>Client Directory</h3>
-    <p class="text-dim">Built automatically from booking history &mdash; no separate data entry.</p>
+    <p class="text-dim">Built automatically from booking history, no separate data entry needed.</p>
     <div id="clientsList"></div>
   </section>
 
   <section class="tab-panel" data-panel="services">
     <h3>Services</h3>
-    <p class="text-dim">Duration is the full client-facing time. Mark "has downtime" for services like color where you're free during processing &mdash; it's shown to clients as a hint, not enforced.</p>
+    <p class="text-dim">Duration is the full client-facing time. Mark "has downtime" for services like color where you're free during processing. It's shown to clients as a hint, not enforced.</p>
     <div id="servicesEditor"></div>
     <button class="btn btn--ghost btn--sm" id="addServiceBtn" style="margin-top:10px;">+ Add Service</button>
     <div style="margin-top:24px;"><button class="btn btn--gold" id="saveServicesBtn">Save Services</button> <span id="servicesMsg"></span></div>
@@ -280,7 +280,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     <button class="btn btn--ghost btn--sm" id="addTestimonialBtn" style="margin-top:10px;">+ Add Testimonial</button>
 
     <h3 style="margin-top:36px;">Gallery</h3>
-    <p class="text-dim" style="font-size:0.88rem;">Add an image URL once you have real photography hosted somewhere &mdash; leave blank to keep the elegant placeholder tile.</p>
+    <p class="text-dim" style="font-size:0.88rem;">Add an image URL once you have real photography hosted somewhere. Leave blank to keep the placeholder tile.</p>
     <div id="galleryEditor"></div>
     <button class="btn btn--ghost btn--sm" id="addGalleryBtn" style="margin-top:10px;">+ Add Gallery Item</button>
 
@@ -301,12 +301,12 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     <button class="btn btn--gold" id="saveSettingsBtn">Save Business Info</button> <span id="settingsMsg"></span>
 
     <h3 style="margin-top:44px;">Sync to Your Phone Calendar</h3>
-    <p class="text-dim">Tap the button below on your phone and every confirmed (and pending) appointment will show up in your regular calendar app going forward. It refreshes automatically every few hours &mdash; this is a one-way sync (salon &rarr; phone), not a two-way connection.</p>
+    <p class="text-dim">Tap the button below on your phone and every confirmed (and pending) appointment will show up in your regular calendar app going forward. It refreshes automatically every few hours. This is a one-way sync (salon &rarr; phone), not a two-way connection.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0;">
       <a class="btn btn--gold btn--sm" href="${escapeAttr(webcalUrl)}" id="calSubscribeBtn">Add to Calendar</a>
       <a class="btn btn--ghost btn--sm" href="${escapeAttr(feedUrl)}" download="next-chapter-salon.ics" id="calDownloadBtn">Download .ics File</a>
     </div>
-    <p class="text-dim" style="font-size:0.85rem;">Tapping "Add to Calendar" opens your phone's Calendar app directly and subscribes for you &mdash; that's the one-tap option and what most iPhones expect. If it doesn't open anything (some Android browsers ignore the link type), use "Download .ics File" instead, or copy the link below and paste it into your calendar app's "Subscribe by URL" / "From URL" option.</p>
+    <p class="text-dim" style="font-size:0.85rem;">Tapping "Add to Calendar" opens your phone's Calendar app directly and subscribes for you. That's the one-tap option and what most iPhones expect. If it doesn't open anything (some Android browsers ignore the link type), use "Download .ics File" instead, or copy the link below and paste it into your calendar app's "Subscribe by URL" / "From URL" option.</p>
     <div class="feed-box">${escapeHtml(feedUrl)}</div>
   </section>
 
@@ -374,7 +374,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     list.innerHTML = pending.map(function (p) {
       var conflictNote = p.conflictCount > 0
         ? '<div class="pill pill--conflict" style="margin-top:8px;">Overlaps ' + p.conflictCount + ' other booking' + (p.conflictCount > 1 ? 's' : '') + '</div>'
-        : (p.has_downtime ? '<div class="pill pill--pending" style="margin-top:8px;">Has downtime &mdash; good candidate to double-book</div>' : '');
+        : (p.has_downtime ? '<div class="pill pill--pending" style="margin-top:8px;">Has downtime, good candidate to double-book</div>' : '');
       return '<div class="req-card' + (p.conflictCount > 0 ? ' has-conflict' : '') + '">' +
         '<div class="req-row">' +
           '<div>' +

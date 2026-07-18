@@ -17,7 +17,7 @@ ${renderNav("/gift-cards")}
   <div class="wrap">
     <span class="eyebrow">Gift a Chapter</span>
     <h1>Gift Cards</h1>
-    <p class="lede center">The gift of a fresh start &mdash; for someone else's next chapter.</p>
+    <p class="lede center">The gift of a fresh start, for someone else's next chapter.</p>
   </div>
 </header>
 

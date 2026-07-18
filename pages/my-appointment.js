@@ -64,7 +64,7 @@ export async function onRequestGet(context) {
       </div>
       ${
         appointment.status === "pending_review"
-          ? `<p class="text-dim" style="margin-top:20px;">We personally review every request &mdash; you'll receive an email the moment we confirm or need to adjust this.</p>`
+          ? `<p class="text-dim" style="margin-top:20px;">We personally review every request. You'll get an email the moment we confirm it or need to adjust it.</p>`
           : ""
       }
       ${

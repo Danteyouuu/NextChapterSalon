@@ -19,7 +19,7 @@ ${renderNav("/services")}
   <div class="wrap">
     <span class="eyebrow">The Menu</span>
     <h1>Services &amp; Pricing</h1>
-    <p class="lede center">Every service begins with a consultation. Pricing reflects hair length, density, and complexity &mdash; consider these a starting chapter, not the whole book.</p>
+    <p class="lede center">Every service begins with a consultation. Pricing reflects hair length, density, and complexity, so think of these as a starting point rather than a final quote.</p>
   </div>
 </header>
 

@@ -14,7 +14,7 @@ ${renderNav("/policies")}
   <div class="wrap">
     <span class="eyebrow">Good to Know</span>
     <h1>Salon Policies</h1>
-    <p class="lede center">A few house rules that keep every client's time &mdash; including yours &mdash; respected.</p>
+    <p class="lede center">A few house rules that help us respect everyone's time, including yours.</p>
   </div>
 </header>
 
@@ -22,11 +22,11 @@ ${renderNav("/policies")}
   <div class="wrap" style="max-width:800px;">
     <div class="card card--framed reveal" style="margin-bottom:28px;">
       <h3>Booking &amp; Confirmation</h3>
-      <p class="text-dim">Every appointment request is reviewed personally before it's confirmed &mdash; you'll receive an email the moment we accept or need to adjust your request. Please wait for confirmation before making other plans around your appointment.</p>
+      <p class="text-dim">Every appointment request is reviewed personally before it's confirmed. You'll get an email the moment we accept it or need to adjust it, so please wait for that confirmation before making other plans around your appointment.</p>
     </div>
     <div class="card card--framed reveal" style="margin-bottom:28px;">
       <h3>Cancellations &amp; Rescheduling</h3>
-      <p class="text-dim">We ask for at least 24 hours' notice to cancel or reschedule. Late cancellations and no-shows affect every stylist's day and the clients who couldn't get that slot &mdash; we appreciate the courtesy.</p>
+      <p class="text-dim">We ask for at least 24 hours' notice to cancel or reschedule. Late cancellations and no-shows affect every stylist's day, plus the clients who couldn't get that slot, so we appreciate the courtesy.</p>
     </div>
     <div class="card card--framed reveal" style="margin-bottom:28px;">
       <h3>Late Arrivals</h3>
