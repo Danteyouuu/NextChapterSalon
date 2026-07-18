@@ -18,6 +18,8 @@ import * as manageContent from "./api/manage-content.js";
 import * as contact from "./api/contact.js";
 import * as dashboardData from "./api/dashboard-data.js";
 import * as manualAppointment from "./api/manual-appointment.js";
+import * as adminLogin from "./api/admin-login.js";
+import * as adminLogout from "./api/admin-logout.js";
 
 import * as homePage from "./pages/home.js";
 import * as aboutPage from "./pages/about.js";
@@ -31,6 +33,7 @@ import * as giftCardsPage from "./pages/gift-cards.js";
 import * as bookingPage from "./pages/booking.js";
 import * as myAppointmentPage from "./pages/my-appointment.js";
 import * as dashboardPage from "./pages/dashboard.js";
+import * as adminPage from "./pages/admin.js";
 import * as calendarFeed from "./pages/calendar-feed.js";
 
 export async function routeNextChapterSalon(request, env, ctx, path, method) {
@@ -79,6 +82,12 @@ export async function routeNextChapterSalon(request, env, ctx, path, method) {
   if (path === "/api/manual-appointment" && method === "POST") {
     return manualAppointment.onRequestPost(context());
   }
+  if (path === "/api/admin-login" && method === "POST") {
+    return adminLogin.onRequestPost(context());
+  }
+  if (path === "/api/admin-logout" && method === "POST") {
+    return adminLogout.onRequestPost(context());
+  }
 
   // ---- Pages ----
   if (path === "/" && method === "GET") {
@@ -110,6 +119,9 @@ export async function routeNextChapterSalon(request, env, ctx, path, method) {
   }
   if (path === "/booking" && method === "GET") {
     return bookingPage.onRequestGet(context());
+  }
+  if (path === "/admin" && method === "GET") {
+    return adminPage.onRequestGet(context());
   }
 
   const myApptMatch = path.match(/^\/my-appointment\/([^/]+)$/);

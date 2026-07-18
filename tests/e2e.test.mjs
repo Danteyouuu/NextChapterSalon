@@ -69,6 +69,21 @@ async function call(method, pathWithQuery, body) {
   return routeNextChapterSalon(request, env, ctx, u.pathname, method);
 }
 
+// Same as call(), but lets a test attach a Cookie header (for /admin session
+// tests) and inspect the raw Response (for reading Set-Cookie back out).
+async function callRaw(method, pathWithQuery, { body, cookie } = {}) {
+  const u = new URL(`http://localhost${pathWithQuery}`);
+  const headers = {};
+  if (body) headers["Content-Type"] = "application/json";
+  if (cookie) headers["Cookie"] = cookie;
+  const request = new Request(u.toString(), {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return routeNextChapterSalon(request, env, ctx, u.pathname, method);
+}
+
 async function check(name, fn) {
   try {
     await fn();
@@ -334,6 +349,71 @@ await check("GET /api/dashboard-data reflects updated tagline", async () => {
   const res = await call("GET", `/api/dashboard-data?manageToken=${MANAGE_TOKEN}`);
   const data = await res.json();
   assert(data.settings.tagline === "Updated Tagline", `tagline not updated, got: ${data.settings.tagline}`);
+});
+
+console.log("=== /admin password gate ===");
+let adminCookie = null;
+
+await check("GET /admin with no password set yet -> first-time setup form", async () => {
+  const res = await callRaw("GET", "/admin");
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  const text = await res.text();
+  assert(/create your admin password/i.test(text), "expected first-time setup copy, got something else");
+});
+
+await check("POST /api/admin-login with short password -> rejected", async () => {
+  const res = await callRaw("POST", "/api/admin-login", { body: { password: "short" } });
+  assert(res.status === 400, `expected 400, got ${res.status}`);
+});
+
+await check("POST /api/admin-login sets the password on first use and returns a cookie", async () => {
+  const res = await callRaw("POST", "/api/admin-login", { body: { password: "test-password-123" } });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "first-time admin-login not ok: " + JSON.stringify(data));
+  const setCookie = res.headers.get("Set-Cookie") || res.headers.get("set-cookie");
+  assert(setCookie && setCookie.includes("ncs_admin="), "no ncs_admin cookie in Set-Cookie header");
+  adminCookie = setCookie.split(";")[0]; // "ncs_admin=<value>"
+});
+
+await check("GET /admin again now shows a login form, not first-time setup", async () => {
+  const res = await callRaw("GET", "/admin");
+  const text = await res.text();
+  assert(/admin login/i.test(text) && !/create your admin password/i.test(text), "still showing first-time setup after password was set");
+});
+
+await check("POST /api/admin-login with wrong password -> 401", async () => {
+  const res = await callRaw("POST", "/api/admin-login", { body: { password: "totally-wrong-password" } });
+  assert(res.status === 401, `expected 401, got ${res.status}`);
+});
+
+await check("POST /api/admin-login with correct password -> ok + cookie", async () => {
+  const res = await callRaw("POST", "/api/admin-login", { body: { password: "test-password-123" } });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "correct-password login not ok: " + JSON.stringify(data));
+});
+
+await check("GET /admin with valid cookie renders the actual dashboard", async () => {
+  const res = await callRaw("GET", "/admin", { cookie: adminCookie });
+  assert(res.status === 200, `expected 200, got ${res.status}`);
+  const text = await res.text();
+  assert(/Owner Dashboard/i.test(text) && /Pending Requests/i.test(text), "cookie-authenticated /admin didn't render the dashboard");
+});
+
+await check("GET /admin with garbage cookie -> still shows login, not dashboard", async () => {
+  const res = await callRaw("GET", "/admin", { cookie: "ncs_admin=not-the-real-token" });
+  const text = await res.text();
+  assert(/admin login/i.test(text), "invalid cookie should not grant dashboard access");
+});
+
+await check("POST /api/admin-logout clears the cookie", async () => {
+  const res = await callRaw("POST", "/api/admin-logout");
+  const setCookie = res.headers.get("Set-Cookie") || res.headers.get("set-cookie");
+  assert(setCookie && setCookie.includes("Max-Age=0"), "logout should clear the cookie with Max-Age=0");
+});
+
+await check("/dashboard/:manageToken direct link still works unchanged", async () => {
+  const res = await call("GET", `/dashboard/${MANAGE_TOKEN}`);
+  assert(res.status === 200, `expected 200, got ${res.status}`);
 });
 
 console.log(`\n=== Results: ${pass} passed, ${fail} failed (${pass + fail} total) ===`);

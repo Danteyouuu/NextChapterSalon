@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS ncs_settings (
   address_line2 TEXT,
   timezone TEXT NOT NULL DEFAULT 'America/Chicago',
   manage_token TEXT NOT NULL UNIQUE,   -- private-link credential for the owner dashboard, same trust model as booking-system
+  admin_password_hash TEXT,   -- NULL until first /admin login (see lib/auth.js) -- friendlier front door in front of manage_token
+  admin_password_salt TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

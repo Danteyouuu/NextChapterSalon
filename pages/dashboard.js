@@ -63,7 +63,10 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
       <span class="eyebrow" style="margin-bottom:2px;">Owner Dashboard</span>
       <h2 style="margin:0;">${escapeHtml(settings.business_name)}</h2>
     </div>
-    <a class="btn btn--ghost btn--sm" href="/" target="_blank">View Live Site &rarr;</a>
+    <div style="display:flex;gap:10px;">
+      <a class="btn btn--ghost btn--sm" href="/" target="_blank">View Live Site &rarr;</a>
+      <button class="btn btn--ghost btn--sm" id="logoutBtn" type="button">Log Out</button>
+    </div>
   </div>
   <div class="wrap tabs" id="tabs">
     <button class="tab-btn active" data-tab="requests">Requests <span class="tab-badge" id="pendingBadge" style="display:none;">0</span></button>
@@ -195,6 +198,18 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
 <script>
   var MANAGE_TOKEN = ${toScriptJson(token)};
   var DATA = null;
+
+  // ---- Log out (only meaningful if this session was reached via /admin's
+  // cookie login; if you're on /dashboard/:manageToken directly there's no
+  // cookie to clear, so this just harmlessly sends you to /admin) ----
+  var logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function () {
+      fetch('/api/admin-logout', { method: 'POST' }).finally(function () {
+        window.location.href = '/admin';
+      });
+    });
+  }
 
   // ---- Tabs ----
   document.querySelectorAll('.tab-btn').forEach(function (btn) {
