@@ -304,6 +304,31 @@ await check("POST /api/manual-appointment creates a confirmed appointment direct
   assert(data.ok, "manual-appointment not ok: " + JSON.stringify(data));
 });
 
+await check("POST /api/manual-appointment rejects a date in the past", async () => {
+  const res = await call("POST", "/api/manual-appointment", {
+    manageToken: MANAGE_TOKEN,
+    serviceId: 6,
+    customerName: "Yesterday Yolanda",
+    customerEmail: "yolanda@example.com",
+    startAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+  });
+  const data = await res.json();
+  assert(res.status === 400, `expected 400, got ${res.status}: ${JSON.stringify(data)}`);
+  assert(/past date/i.test(data.error || ""), "expected a past-date error, got: " + JSON.stringify(data));
+});
+
+await check("POST /api/manual-appointment allows a time earlier today (logging a walk-in after the fact)", async () => {
+  const res = await call("POST", "/api/manual-appointment", {
+    manageToken: MANAGE_TOKEN,
+    serviceId: 6,
+    customerName: "Just Now Jamie",
+    customerEmail: "jamie@example.com",
+    startAt: new Date(Date.now() - 5 * 60000).toISOString(), // 5 minutes ago, still today
+  });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "expected an earlier-today walk-in to be allowed: " + JSON.stringify(data));
+});
+
 console.log("=== Cancellation ===");
 await check("POST /api/cancel-appointment (customer self-service)", async () => {
   const res = await call("POST", "/api/cancel-appointment", { manageToken: customerManageToken });

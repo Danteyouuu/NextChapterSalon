@@ -9,6 +9,7 @@
 import { renderHead, escapeHtml, escapeAttr, toScriptJson } from "../lib/layout.js";
 import { getSettingsByManageToken } from "../lib/db.js";
 import { getOrigin } from "../lib/http.js";
+import { utcToZonedParts } from "../lib/availability.js";
 
 export async function onRequestGet(context) {
   const { request, env, params } = context;
@@ -26,6 +27,11 @@ export async function onRequestGet(context) {
   // subscribe/import flow instead of just opening the ICS as text in a
   // browser tab. Same URL, different scheme.
   const webcalUrl = feedUrl.replace(/^https?:\/\//, "webcal://");
+  // Baked in server-side using the salon's own timezone (not the browser's,
+  // not UTC) so the walk-in date picker's floor matches exactly what
+  // api/manual-appointment.js enforces server-side -- see that file for why
+  // this blocks past *dates* but not past *times* on today.
+  const todayLocalDate = utcToZonedParts(new Date(), settings.timezone).date;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -154,7 +160,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
         <div><label>Stylist</label><select id="manualStylist"><option value="">No preference</option></select></div>
       </div>
       <div class="field-row">
-        <div><label>Date</label><input id="manualDate" type="date"></div>
+        <div><label>Date</label><input id="manualDate" type="date" min="${todayLocalDate}"></div>
         <div><label>Time</label><input id="manualTime" type="time"></div>
       </div>
       <label>Client Name</label>
@@ -554,6 +560,11 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     var form = document.getElementById('manualForm');
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
     if (form.style.display === 'block') {
+      // Re-floor the date picker at "today" every time the form opens, in
+      // case this dashboard tab has been sitting open since before
+      // midnight — the server-rendered min="" only reflects page load time.
+      var tz = (DATA.settings && DATA.settings.timezone) || 'America/Chicago';
+      document.getElementById('manualDate').min = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
       var svcSel = document.getElementById('manualService');
       svcSel.innerHTML = (DATA.services || []).filter(function (s) { return s.active; }).map(function (s) {
         return '<option value="' + s.id + '">' + escapeHtml(s.name) + ' (' + s.duration_minutes + ' min)</option>';

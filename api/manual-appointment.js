@@ -2,9 +2,15 @@
 // Owner-only. Adds a walk-in or phone-booked appointment directly as
 // 'confirmed' — bypasses the public request/approval queue since the owner
 // is entering it themselves.
+//
+// Blocks past *dates* (compared in the salon's own timezone, not UTC or the
+// owner's device clock) but not past *times* on today -- a walk-in that
+// started 10 minutes ago and is being logged right now is a legitimate,
+// common case, not a bug.
 
 import { requireOwner } from "../lib/auth.js";
 import { getServiceById, createManualAppointment } from "../lib/db.js";
+import { utcToZonedParts } from "../lib/availability.js";
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -33,6 +39,13 @@ export async function onRequestPost(context) {
 
   const startDate = new Date(startAt);
   if (isNaN(startDate.getTime())) return json({ ok: false, error: "Invalid time" }, 400);
+
+  const todayLocal = utcToZonedParts(new Date(), settings.timezone).date;
+  const requestedLocal = utcToZonedParts(startDate, settings.timezone).date;
+  if (requestedLocal < todayLocal) {
+    return json({ ok: false, error: "Can't add an appointment on a past date." }, 400);
+  }
+
   const endDate = new Date(startDate.getTime() + service.duration_minutes * 60000);
 
   const appt = await createManualAppointment(env, {
