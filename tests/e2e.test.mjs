@@ -256,6 +256,99 @@ await check("POST /api/accept-appointment with wrong owner token -> 401", async 
   assert(res.status === 401, `expected 401, got ${res.status}`);
 });
 
+console.log("=== Day-only booking (no time picker) ===");
+let dayOnlyAppointmentId = null;
+
+await check("POST /api/create-appointment with date instead of startAt -> picks a placeholder time", async () => {
+  const targetDate = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+  const res = await call("POST", "/api/create-appointment", {
+    serviceId: 1,
+    customerName: "Day Only Dana",
+    customerEmail: "dana@example.com",
+    date: targetDate,
+  });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "day-only create-appointment not ok: " + JSON.stringify(data));
+
+  const dash = await call("GET", `/api/dashboard-data?manageToken=${MANAGE_TOKEN}`);
+  const dashData = await dash.json();
+  const created = dashData.pending.find((p) => p.customer_email === "dana@example.com");
+  assert(created, "day-only appointment not found in pending queue");
+  assert(created.start_at.slice(0, 10) === targetDate, `expected placeholder time on ${targetDate}, got ${created.start_at}`);
+  dayOnlyAppointmentId = created.id;
+});
+
+await check("POST /api/create-appointment with a past date -> rejected", async () => {
+  const pastDate = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+  const res = await call("POST", "/api/create-appointment", {
+    serviceId: 1,
+    customerName: "Past Patty",
+    customerEmail: "patty@example.com",
+    date: pastDate,
+  });
+  const data = await res.json();
+  assert(res.status === 400, `expected 400, got ${res.status}: ${JSON.stringify(data)}`);
+});
+
+console.log("=== Drag-and-drop reschedule ===");
+
+await check("POST /api/reschedule-appointment moves an appointment to a new time", async () => {
+  const before = await getAppointmentSnapshot(dayOnlyAppointmentId);
+  const newStart = new Date(new Date(before.start_at).getTime() + 3 * 3600000).toISOString();
+  const newEnd = new Date(new Date(newStart).getTime() + (new Date(before.end_at) - new Date(before.start_at))).toISOString();
+  const res = await call("POST", "/api/reschedule-appointment", {
+    manageToken: MANAGE_TOKEN,
+    appointmentId: dayOnlyAppointmentId,
+    startAt: newStart,
+    endAt: newEnd,
+  });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "reschedule not ok: " + JSON.stringify(data));
+  assert(data.appointment.start_at.startsWith(newStart.slice(0, 16)), "start time wasn't updated: " + data.appointment.start_at);
+});
+
+await check("POST /api/reschedule-appointment can also reassign the stylist", async () => {
+  const before = await getAppointmentSnapshot(dayOnlyAppointmentId);
+  const res = await call("POST", "/api/reschedule-appointment", {
+    manageToken: MANAGE_TOKEN,
+    appointmentId: dayOnlyAppointmentId,
+    startAt: before.start_at,
+    endAt: before.end_at,
+    stylistId: 2,
+  });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "reschedule (stylist) not ok: " + JSON.stringify(data));
+  assert(data.appointment.stylist_id === 2, "stylist_id wasn't updated: " + JSON.stringify(data.appointment));
+});
+
+await check("POST /api/reschedule-appointment to a past date -> rejected", async () => {
+  const res = await call("POST", "/api/reschedule-appointment", {
+    manageToken: MANAGE_TOKEN,
+    appointmentId: dayOnlyAppointmentId,
+    startAt: new Date(Date.now() - 5 * 86400000).toISOString(),
+    endAt: new Date(Date.now() - 5 * 86400000 + 1800000).toISOString(),
+  });
+  assert(res.status === 400, `expected 400, got ${res.status}`);
+});
+
+await check("POST /api/reschedule-appointment with wrong owner token -> 401", async () => {
+  const res = await call("POST", "/api/reschedule-appointment", {
+    manageToken: "WRONG",
+    appointmentId: dayOnlyAppointmentId,
+    startAt: new Date(Date.now() + 86400000).toISOString(),
+    endAt: new Date(Date.now() + 86400000 + 1800000).toISOString(),
+  });
+  assert(res.status === 401, `expected 401, got ${res.status}`);
+});
+
+async function getAppointmentSnapshot(id) {
+  const dash = await call("GET", `/api/dashboard-data?manageToken=${MANAGE_TOKEN}`);
+  const dashData = await dash.json();
+  const found = dashData.pending.concat(dashData.upcoming).find((a) => a.id === id);
+  assert(found, `appointment ${id} not found for snapshot`);
+  return found;
+}
+
 console.log("=== Overlap / downtime double-booking ===");
 let secondApptId = null;
 await check("POST second overlapping appointment (haircut into balayage downtime)", async () => {

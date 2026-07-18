@@ -5,6 +5,13 @@
 // overlapping times: the owner reviews and decides by hand. Slots that
 // overlap an existing appointment still show up, with a soft badge ("2
 // other bookings near this time") so the client isn't surprised later.
+//
+// SHOW_TIME_SLOTS (below, in the client script) is currently off: customers
+// pick a day only, not a specific time — the owner places them on the
+// actual time using the dashboard's drag-and-drop calendar instead. All the
+// time-slot picking code is still here and still works end-to-end
+// (api/create-appointment.js still accepts an exact startAt) — it's just
+// not rendered. Flip the flag back to true to re-enable it.
 
 import { renderHead, renderNav, renderFooter, toScriptJson, escapeHtml } from "../lib/layout.js";
 import { listServicesGroupedByCategory, listStylists } from "../lib/db.js";
@@ -49,8 +56,9 @@ ${renderNav("/booking")}
 
         <label>Day</label>
         <div class="day-row" id="dayRow" style="display:flex;gap:8px;overflow-x:auto;padding:4px 0 14px;"></div>
+        <p class="text-dim" id="dayHint" style="font-size:0.88rem;margin-top:-4px;">Pick a day and we'll be in touch to confirm your exact time.</p>
 
-        <label>Available Times</label>
+        <label id="slotsLabel" style="display:none;">Available Times</label>
         <div class="slot-grid" id="slotGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:6px;"></div>
         <p class="text-dim" id="emptyNote" style="font-size:0.9rem;"></p>
       </div>
@@ -92,6 +100,19 @@ ${renderFooter()}
   var selectedSlot = null;
   var selectedDay = null;
   var selectedOverlap = 0;
+
+  // Customers currently pick a day only -- the owner places the exact time
+  // using the dashboard's drag-and-drop calendar (see api/create-
+  // appointment.js's day-only path). All the time-slot code below still
+  // works; flip this back to true to show it again.
+  var SHOW_TIME_SLOTS = false;
+  if (!SHOW_TIME_SLOTS) {
+    document.getElementById('slotsLabel').style.display = 'none';
+    document.getElementById('slotGrid').style.display = 'none';
+    document.getElementById('emptyNote').style.display = 'none';
+  } else {
+    document.getElementById('dayHint').style.display = 'none';
+  }
 
   var serviceSel = document.getElementById('service');
   CATEGORIES.forEach(function(cat) {
@@ -136,9 +157,22 @@ ${renderFooter()}
       if (dateStr === selectedDay) { btn.style.background = 'var(--gold)'; btn.style.color = 'var(--ink)'; }
       btn.style.flex = '0 0 auto';
       btn.textContent = fmtDay(dateStr);
-      btn.onclick = (function (ds) { return function () { selectedDay = ds; selectedSlot = null; buildDayRow(); loadSlots(); }; })(dateStr);
+      btn.onclick = (function (ds) { return function () {
+        selectedDay = ds; selectedSlot = null; buildDayRow();
+        if (SHOW_TIME_SLOTS) { loadSlots(); } else { selectDayOnly(); }
+      }; })(dateStr);
       row.appendChild(btn);
     }
+  }
+
+  // Day-only path: no time picker, straight to the contact form once a day
+  // is chosen. The owner assigns the actual time afterward.
+  function selectDayOnly() {
+    var summary = document.getElementById('selectedSummary');
+    var s = currentService();
+    summary.textContent = (s ? s.name : '') + ' — ' + fmtDay(selectedDay) + ' (we will confirm the exact time)';
+    document.getElementById('bookingForm').style.display = 'block';
+    document.getElementById('bookingForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function loadSlots() {
@@ -186,15 +220,18 @@ ${renderFooter()}
     }).catch(function () { empty.textContent = 'Could not load availability.'; });
   }
 
-  serviceSel.onchange = function () { updateServiceNote(); selectedSlot = null; loadSlots(); };
+  serviceSel.onchange = function () {
+    updateServiceNote(); selectedSlot = null;
+    if (SHOW_TIME_SLOTS) { loadSlots(); } else { selectDayOnly(); }
+  };
   updateServiceNote();
   selectedDay = new Date().toISOString().slice(0, 10);
   buildDayRow();
-  loadSlots();
+  if (SHOW_TIME_SLOTS) { loadSlots(); } else { selectDayOnly(); }
 
   document.getElementById('bookingForm').onsubmit = function (e) {
     e.preventDefault();
-    if (!selectedSlot) return;
+    if (SHOW_TIME_SLOTS ? !selectedSlot : !selectedDay) return;
     var btn = document.getElementById('submitBtn');
     var msg = document.getElementById('formMsg');
     btn.disabled = true;
@@ -204,15 +241,14 @@ ${renderFooter()}
     fetch('/api/create-appointment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify(Object.assign({
         serviceId: Number(serviceSel.value),
         stylistId: document.getElementById('stylist').value || null,
-        startAt: selectedSlot,
         customerName: document.getElementById('customerName').value,
         customerEmail: document.getElementById('customerEmail').value,
         customerPhone: document.getElementById('customerPhone').value,
         notes: document.getElementById('notes').value,
-      }),
+      }, SHOW_TIME_SLOTS ? { startAt: selectedSlot } : { date: selectedDay })),
     }).then(function (r) { return r.json(); }).then(function (res) {
       btn.disabled = false;
       if (!res.ok) {

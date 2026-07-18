@@ -110,6 +110,34 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   .cropper-controls { display:flex; align-items:center; gap:10px; margin:16px 0; }
   .cropper-controls input[type="range"] { margin:0; width:100%; }
   .cropper-actions { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
+
+  /* ---- Drag-and-drop day calendar (Calendar tab) ---- */
+  .cal-scroll { overflow-x:auto; margin-top:16px; border:1px solid rgba(201,166,107,0.15); border-radius:8px; }
+  .cal-grid { display:flex; min-width:100%; width:max-content; }
+  .cal-axis { flex:0 0 56px; position:relative; border-right:1px solid rgba(201,166,107,0.15); }
+  .cal-axis__spacer { padding:10px 12px; font-size:0.78rem; visibility:hidden; border-bottom:1px solid transparent; }
+  .cal-axis__label { position:absolute; right:8px; transform:translateY(-50%); font-size:0.72rem; color:var(--cream-faint); font-family:var(--font-label); letter-spacing:0.04em; }
+  .cal-col { flex:0 0 220px; position:relative; border-right:1px solid rgba(201,166,107,0.1); background-image:repeating-linear-gradient(to bottom, rgba(201,166,107,0.08) 0, rgba(201,166,107,0.08) 1px, transparent 1px, transparent var(--cal-hour-px, 90px)); }
+  .cal-col:last-child { border-right:none; }
+  .cal-col__header { background:var(--bg-panel); border-bottom:1px solid rgba(201,166,107,0.2); padding:10px 12px; font-family:var(--font-label); text-transform:uppercase; letter-spacing:0.06em; font-size:0.78rem; color:var(--gold); text-align:center; }
+  .cal-body-wrap { position:relative; }
+  .cal-block {
+    position:absolute; left:4px; right:4px; border-radius:6px; padding:6px 8px; overflow:hidden;
+    font-size:0.78rem; line-height:1.3; cursor:grab; touch-action:none; box-shadow:0 2px 6px rgba(0,0,0,0.25);
+    border:1.5px solid; user-select:none;
+  }
+  .cal-block:active { cursor:grabbing; }
+  .cal-block.is-pending { border-style:dashed; opacity:0.88; }
+  .cal-block.is-dragging { z-index:10; box-shadow:0 6px 16px rgba(0,0,0,0.4); }
+  .cal-block__title { font-weight:600; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-block__time { color:rgba(255,255,255,0.85); font-size:0.7rem; }
+  .cal-resize { position:absolute; left:0; right:0; bottom:0; height:8px; cursor:ns-resize; }
+  .cal-empty { padding:40px 20px; text-align:center; color:var(--cream-faint); }
+
+  @media (max-width: 640px) {
+    .cal-col { flex-basis:170px; }
+    .cal-axis { flex-basis:44px; }
+  }
 </style>
 </head>
 <body>
@@ -147,10 +175,16 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
 
   <section class="tab-panel" data-panel="calendar">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-      <h3 style="margin:0;">Upcoming Appointments</h3>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn--ghost mini-btn" id="calPrevBtn" type="button" aria-label="Previous day">&larr;</button>
+        <button class="btn btn--ghost mini-btn" id="calTodayBtn" type="button">Today</button>
+        <button class="btn btn--ghost mini-btn" id="calNextBtn" type="button" aria-label="Next day">&rarr;</button>
+        <h3 style="margin:0 0 0 6px;" id="calDateLabel"></h3>
+      </div>
       <button class="btn btn--gold btn--sm" id="openManualBtn">+ Add Walk-in / Phone Booking</button>
     </div>
-    <div id="upcomingList" style="margin-top:20px;"></div>
+    <p class="text-dim" style="font-size:0.85rem;margin-top:8px;">Drag an appointment to move it to a new time or stylist. Drag the bottom edge to change its length. Dashed blocks are still pending review.</p>
+    <div class="cal-scroll"><div class="cal-grid" id="calGrid"></div></div>
 
     <div class="card card--framed" id="manualForm" style="display:none;margin-top:24px;">
       <h4>New Manual Appointment</h4>
@@ -279,6 +313,11 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     });
   });
 
+  function fmtDay(dateStr) {
+    var d = new Date(dateStr + 'T12:00:00Z');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+
   function fmtDateTime(iso, tz) {
     var d = new Date(iso);
     return d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz || 'America/Chicago' });
@@ -292,7 +331,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
         if (!res.ok) { document.body.innerHTML = '<p style="padding:60px;color:#e08aa0;">' + (res.error || 'Could not load dashboard.') + '</p>'; return; }
         DATA = res;
         renderPending();
-        renderUpcoming();
+        renderCalendar();
         renderClients();
       });
   }
@@ -349,16 +388,256 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     });
   }
 
-  function renderUpcoming() {
-    var list = document.getElementById('upcomingList');
-    var upcoming = (DATA.upcoming || []).filter(function (a) { return a.status === 'confirmed'; });
-    if (!upcoming.length) { list.innerHTML = '<p class="subtab-empty">Nothing confirmed yet.</p>'; return; }
-    list.innerHTML = '<div class="row-list">' + upcoming.map(function (a) {
-      return '<div class="row-list__item"><div><strong>' + escapeHtml(a.service_name) + '</strong> &mdash; ' + escapeHtml(a.customer_name) +
-        '<br><span class="text-dim">' + fmtDateTime(a.start_at, DATA.settings.timezone) + (a.stylist_name ? ' &middot; ' + escapeHtml(a.stylist_name) : '') + '</span></div>' +
-        '<span class="pill pill--confirmed">Confirmed</span></div>';
-    }).join('') + '</div>';
+  // ---- Calendar tab: drag-and-drop day scheduler ----
+  // Design notes:
+  // - One column per active stylist (plus an "Unassigned" column if any
+  //   appointment that day has no stylist), a day at a time -- prev/next/
+  //   today to navigate. Dragging is scoped to the visible day; to move an
+  //   appointment to a different day, navigate there first.
+  // - Blocks are colored on a green->red gradient by duration (short =
+  //   green, long = red), and that color is recomputed live while resizing
+  //   so stretching a block out visibly shifts it toward red as it asked.
+  // - Move/resize math works entirely in minute-deltas from the block's
+  //   already-correct rendered position, applied to the original UTC
+  //   timestamp -- this sidesteps needing a local-time-to-UTC converter in
+  //   the browser (see api/reschedule-appointment.js for the equivalent
+  //   server-side reasoning).
+  var CAL_PX_PER_MIN = 1.5;
+  var CAL_SNAP_MIN = 15;
+  var calDate = null; // "YYYY-MM-DD", in the salon's own timezone
+  var calDragState = null;
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function todayInTz(tz) { return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); }
+  function addDaysToDateStr(dateStr, n) {
+    var parts = dateStr.split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
   }
+  function localDateStrOf(iso, tz) { return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(iso)); }
+  function localMinutesOfDay(iso, tz) {
+    var parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso));
+    var h = 0, m = 0;
+    parts.forEach(function (p) { if (p.type === 'hour') h = Number(p.value); if (p.type === 'minute') m = Number(p.value); });
+    return h * 60 + m;
+  }
+  function hhmmToMin(hhmm) {
+    var parts = String(hhmm).split(':').map(Number);
+    return (parts[0] || 0) * 60 + (parts[1] || 0);
+  }
+  // Green (short) -> amber -> red (long). 30 min or less is fully green, 90+
+  // is fully red, everything between blends smoothly -- so a walk-in trim
+  // and a long balayage never look alike, and dragging the edge to stretch
+  // a block updates the color the same way in real time.
+  function colorForDuration(minutes) {
+    var t = Math.max(0, Math.min(1, (minutes - 30) / (90 - 30)));
+    var hue = 130 - t * 130; // 130=green, 0=red
+    return { border: 'hsl(' + hue + ',70%,50%)', fill: 'hsla(' + hue + ',70%,50%,0.22)' };
+  }
+
+  function renderCalendarLabel() {
+    var tz = (DATA.settings && DATA.settings.timezone) || 'America/Chicago';
+    var isToday = calDate === todayInTz(tz);
+    document.getElementById('calDateLabel').textContent = fmtDay(calDate) + (isToday ? ' (Today)' : '');
+  }
+
+  function renderCalendar() {
+    if (!calDate) calDate = todayInTz((DATA.settings && DATA.settings.timezone) || 'America/Chicago');
+    renderCalendarLabel();
+
+    var tz = (DATA.settings && DATA.settings.timezone) || 'America/Chicago';
+    var grid = document.getElementById('calGrid');
+    var dayAppts = (DATA.upcoming || []).filter(function (a) {
+      return (a.status === 'confirmed' || a.status === 'pending_review') && localDateStrOf(a.start_at, tz) === calDate;
+    });
+
+    var activeStylists = (DATA.stylists || []).filter(function (s) { return s.active; });
+    var columns = activeStylists.map(function (s) { return { id: s.id, name: s.name }; });
+    var hasUnassigned = dayAppts.some(function (a) { return !a.stylist_id || !activeStylists.some(function (s) { return s.id === a.stylist_id; }); });
+    if (hasUnassigned || !columns.length) columns.push({ id: null, name: columns.length ? 'Unassigned' : 'All Appointments' });
+
+    // Window: business hours for this weekday, expanded to fit anything
+    // scheduled outside them so nothing is ever clipped from view.
+    var weekday = new Date(calDate + 'T12:00:00Z').getUTCDay();
+    var rules = (DATA.rules || []).filter(function (r) { return r.weekday === weekday; });
+    var startMin = rules.length ? Math.min.apply(null, rules.map(function (r) { return hhmmToMin(r.start); })) : 8 * 60;
+    var endMin = rules.length ? Math.max.apply(null, rules.map(function (r) { return hhmmToMin(r.end); })) : 20 * 60;
+    dayAppts.forEach(function (a) {
+      var s = localMinutesOfDay(a.start_at, tz), e = localMinutesOfDay(a.end_at, tz);
+      if (e <= s) e = s + 15; // guard against an appointment that wraps past midnight in this simple day view
+      if (s < startMin) startMin = s;
+      if (e > endMin) endMin = e;
+    });
+    startMin = Math.floor(startMin / 60) * 60;
+    endMin = Math.ceil(endMin / 60) * 60;
+    var totalMin = Math.max(60, endMin - startMin);
+    var bodyHeight = totalMin * CAL_PX_PER_MIN;
+
+    if (!dayAppts.length && !columns.length) { grid.innerHTML = '<div class="cal-empty">No stylists or appointments to show.</div>'; return; }
+
+    var axisHtml = '<div class="cal-axis" style="height:' + (bodyHeight + 40) + 'px;"><div class="cal-axis__spacer">&nbsp;</div>';
+    for (var m = startMin; m <= endMin; m += 60) {
+      axisHtml += '<span class="cal-axis__label" style="top:' + (40 + (m - startMin) * CAL_PX_PER_MIN) + 'px;">' + fmtHourLabel(m) + '</span>';
+    }
+    axisHtml += '</div>';
+
+    var colsHtml = columns.map(function (col) {
+      var blocksHtml = dayAppts.filter(function (a) {
+        return col.id === null ? (!a.stylist_id || !activeStylists.some(function (s) { return s.id === a.stylist_id; })) : a.stylist_id === col.id;
+      }).map(function (a) {
+        var s = localMinutesOfDay(a.start_at, tz);
+        var durMin = Math.max(5, Math.round((new Date(a.end_at) - new Date(a.start_at)) / 60000));
+        var top = (s - startMin) * CAL_PX_PER_MIN;
+        var height = Math.max(18, durMin * CAL_PX_PER_MIN);
+        var color = colorForDuration(durMin);
+        var timeLabel = new Date(a.start_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+        return '<div class="cal-block' + (a.status === 'pending_review' ? ' is-pending' : '') + '" data-id="' + a.id +
+          '" data-start="' + a.start_at + '" data-end="' + a.end_at + '" data-stylist="' + (a.stylist_id || '') +
+          '" style="top:' + top + 'px;height:' + height + 'px;background:' + color.fill + ';border-color:' + color.border + ';">' +
+          '<div class="cal-block__title">' + escapeHtml(a.customer_name) + '</div>' +
+          '<div class="cal-block__time">' + timeLabel + ' &middot; ' + escapeHtml(a.service_name) + '</div>' +
+          '<div class="cal-resize"></div>' +
+        '</div>';
+      }).join('');
+      return '<div class="cal-col" style="--cal-hour-px:' + (60 * CAL_PX_PER_MIN) + 'px;">' +
+        '<div class="cal-col__header">' + escapeHtml(col.name) + '</div>' +
+        '<div class="cal-body-wrap" style="height:' + bodyHeight + 'px;" data-col-id="' + (col.id === null ? '' : col.id) + '">' + blocksHtml + '</div>' +
+      '</div>';
+    }).join('');
+
+    grid.innerHTML = axisHtml + colsHtml;
+    bindCalendarDrag(startMin, columns);
+  }
+
+  function fmtHourLabel(minutes) {
+    var h = Math.floor(minutes / 60), suffix = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + (minutes % 60 ? ':' + pad2(minutes % 60) : '') + suffix;
+  }
+
+  function bindCalendarDrag(startMin, columns) {
+    var bodyWraps = document.querySelectorAll('.cal-body-wrap');
+
+    document.querySelectorAll('.cal-block').forEach(function (block) {
+      block.querySelector('.cal-resize').addEventListener('pointerdown', function (e) {
+        e.stopPropagation();
+        startResize(block, e);
+      });
+      block.addEventListener('pointerdown', function (e) {
+        if (e.target.classList.contains('cal-resize')) return;
+        startMove(block, e);
+      });
+    });
+
+    function startMove(block, e) {
+      var originalTop = parseFloat(block.style.top);
+      var originalLeftWrap = block.closest('.cal-body-wrap');
+      var startClientY = e.clientY, startClientX = e.clientX;
+      calDragState = { type: 'move', block: block, originalTop: originalTop, originalWrap: originalLeftWrap };
+      block.classList.add('is-dragging');
+      block.setPointerCapture(e.pointerId);
+
+      block.addEventListener('pointermove', onMove);
+      block.addEventListener('pointerup', onUp);
+      block.addEventListener('pointercancel', onCancel);
+
+      function onMove(ev) {
+        var deltaY = ev.clientY - startClientY;
+        var snapped = Math.round((originalTop + deltaY) / (CAL_SNAP_MIN * CAL_PX_PER_MIN)) * (CAL_SNAP_MIN * CAL_PX_PER_MIN);
+        block.style.top = Math.max(0, snapped) + 'px';
+
+        // Figure out which column the pointer is currently over, and if
+        // it's different from where the block started, visually move it
+        // there by reparenting -- keeps left/width correct via CSS instead
+        // of tracking pixel offsets across columns manually.
+        var overWrap = null;
+        bodyWraps.forEach(function (w) {
+          var r = w.getBoundingClientRect();
+          if (ev.clientX >= r.left && ev.clientX <= r.right) overWrap = w;
+        });
+        if (overWrap && overWrap !== block.parentElement) overWrap.appendChild(block);
+      }
+      function onUp(ev) {
+        cleanup();
+        // Shift the original instant by the same minute-delta the block
+        // visually moved -- correct regardless of timezone, since a wall-
+        // clock-minute delta on the same calendar day equals the same
+        // millisecond delta in UTC.
+        var origStartMs = new Date(block.dataset.start).getTime();
+        var origEndMs = new Date(block.dataset.end).getTime();
+        var durationMs = origEndMs - origStartMs;
+        var origTopMin = Math.round(originalTop / CAL_PX_PER_MIN);
+        var newTopMin = Math.round(parseFloat(block.style.top) / CAL_PX_PER_MIN);
+        var shiftMin = newTopMin - origTopMin;
+        var finalStartMs = origStartMs + shiftMin * 60000;
+        var finalEndMs = finalStartMs + durationMs;
+        var newColId = block.parentElement.dataset.colId;
+        submitReschedule(block, new Date(finalStartMs).toISOString(), new Date(finalEndMs).toISOString(), newColId === '' ? null : Number(newColId));
+      }
+      function onCancel() { cleanup(); renderCalendar(); }
+      function cleanup() {
+        block.classList.remove('is-dragging');
+        block.removeEventListener('pointermove', onMove);
+        block.removeEventListener('pointerup', onUp);
+        block.removeEventListener('pointercancel', onCancel);
+        calDragState = null;
+      }
+    }
+
+    function startResize(block, e) {
+      var originalHeight = parseFloat(block.style.height);
+      var startClientY = e.clientY;
+      block.classList.add('is-dragging');
+      block.setPointerCapture(e.pointerId);
+      block.addEventListener('pointermove', onMove);
+      block.addEventListener('pointerup', onUp);
+      block.addEventListener('pointercancel', onCancel);
+
+      function onMove(ev) {
+        var deltaY = ev.clientY - startClientY;
+        var snapPx = CAL_SNAP_MIN * CAL_PX_PER_MIN;
+        var newHeight = Math.max(snapPx, Math.round((originalHeight + deltaY) / snapPx) * snapPx);
+        block.style.height = newHeight + 'px';
+        var newDurationMin = Math.round(newHeight / CAL_PX_PER_MIN);
+        var color = colorForDuration(newDurationMin);
+        block.style.background = color.fill;
+        block.style.borderColor = color.border;
+      }
+      function onUp() {
+        cleanup();
+        var newDurationMin = Math.round(parseFloat(block.style.height) / CAL_PX_PER_MIN);
+        var origStartMs = new Date(block.dataset.start).getTime();
+        var finalEndMs = origStartMs + newDurationMin * 60000;
+        submitReschedule(block, new Date(origStartMs).toISOString(), new Date(finalEndMs).toISOString(), block.dataset.stylist ? Number(block.dataset.stylist) : null);
+      }
+      function onCancel() { cleanup(); renderCalendar(); }
+      function cleanup() {
+        block.classList.remove('is-dragging');
+        block.removeEventListener('pointermove', onMove);
+        block.removeEventListener('pointerup', onUp);
+        block.removeEventListener('pointercancel', onCancel);
+      }
+    }
+  }
+
+  function submitReschedule(block, startAt, endAt, stylistId) {
+    fetch('/api/reschedule-appointment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manageToken: MANAGE_TOKEN, appointmentId: Number(block.dataset.id), startAt: startAt, endAt: endAt, stylistId: stylistId }),
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res.ok) { alert(res.error || "Couldn't reschedule that appointment."); }
+      loadData();
+    }).catch(function () {
+      alert("Couldn't reschedule that appointment. Please try again.");
+      loadData();
+    });
+  }
+
+  document.getElementById('calPrevBtn').onclick = function () { calDate = addDaysToDateStr(calDate, -1); renderCalendar(); };
+  document.getElementById('calNextBtn').onclick = function () { calDate = addDaysToDateStr(calDate, 1); renderCalendar(); };
+  document.getElementById('calTodayBtn').onclick = function () { calDate = todayInTz((DATA.settings && DATA.settings.timezone) || 'America/Chicago'); renderCalendar(); };
 
   function renderClients() {
     var list = document.getElementById('clientsList');
@@ -894,7 +1173,10 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
         DATA.upcoming = res.upcoming;
         DATA.clients = res.clients;
         renderPending();
-        if (document.querySelector('.tab-panel[data-panel="calendar"]').classList.contains('active')) renderUpcoming();
+        // Skip re-rendering mid-drag -- would yank the block out from under
+        // an in-progress move/resize. The drag's own submitReschedule()
+        // already calls loadData() (a full render) right after it finishes.
+        if (!calDragState && document.querySelector('.tab-panel[data-panel="calendar"]').classList.contains('active')) renderCalendar();
         if (document.querySelector('.tab-panel[data-panel="clients"]').classList.contains('active')) renderClients();
       });
   }, 20000);

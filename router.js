@@ -21,6 +21,7 @@ import * as manualAppointment from "./api/manual-appointment.js";
 import * as adminLogin from "./api/admin-login.js";
 import * as adminLogout from "./api/admin-logout.js";
 import * as uploadImage from "./api/upload-image.js";
+import * as rescheduleAppointment from "./api/reschedule-appointment.js";
 
 import * as homePage from "./pages/home.js";
 import * as aboutPage from "./pages/about.js";
@@ -92,6 +93,9 @@ export async function routeNextChapterSalon(request, env, ctx, path, method) {
   }
   if (path === "/api/upload-image" && method === "POST") {
     return uploadImage.onRequestPost(context());
+  }
+  if (path === "/api/reschedule-appointment" && method === "POST") {
+    return rescheduleAppointment.onRequestPost(context());
   }
 
   // ---- Pages ----
