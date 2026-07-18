@@ -70,12 +70,14 @@ async function call(method, pathWithQuery, body) {
 }
 
 // Same as call(), but lets a test attach a Cookie header (for /admin session
-// tests) and inspect the raw Response (for reading Set-Cookie back out).
-async function callRaw(method, pathWithQuery, { body, cookie } = {}) {
+// tests), a CF-Connecting-IP header (for rate-limit tests), and inspect the
+// raw Response (for reading Set-Cookie back out).
+async function callRaw(method, pathWithQuery, { body, cookie, ip } = {}) {
   const u = new URL(`http://localhost${pathWithQuery}`);
   const headers = {};
   if (body) headers["Content-Type"] = "application/json";
   if (cookie) headers["Cookie"] = cookie;
+  if (ip) headers["CF-Connecting-IP"] = ip;
   const request = new Request(u.toString(), {
     method,
     headers,
@@ -403,6 +405,30 @@ await check("GET /admin with garbage cookie -> still shows login, not dashboard"
   const res = await callRaw("GET", "/admin", { cookie: "ncs_admin=not-the-real-token" });
   const text = await res.text();
   assert(/admin login/i.test(text), "invalid cookie should not grant dashboard access");
+});
+
+console.log("=== /api/admin-login rate limiting ===");
+
+await check("8 failed attempts from one IP, then a 9th is rate limited (429)", async () => {
+  const ip = "203.0.113.50";
+  for (let i = 0; i < 8; i++) {
+    const res = await callRaw("POST", "/api/admin-login", { body: { password: "wrong-password-" + i }, ip });
+    assert(res.status === 401, `attempt ${i + 1}: expected 401, got ${res.status}`);
+  }
+  const locked = await callRaw("POST", "/api/admin-login", { body: { password: "wrong-password-9" }, ip });
+  assert(locked.status === 429, `9th attempt: expected 429, got ${locked.status}`);
+});
+
+await check("rate limit applies even to the correct password once locked out", async () => {
+  const ip = "203.0.113.50"; // same IP as previous test, already at 8 failures
+  const res = await callRaw("POST", "/api/admin-login", { body: { password: "test-password-123" }, ip });
+  assert(res.status === 429, `expected 429 even with correct password, got ${res.status}`);
+});
+
+await check("a different IP is unaffected by another IP's lockout", async () => {
+  const res = await callRaw("POST", "/api/admin-login", { body: { password: "test-password-123" }, ip: "198.51.100.7" });
+  const data = await res.json();
+  assert(res.status === 200 && data.ok, "fresh IP should not be rate limited: " + JSON.stringify(data));
 });
 
 await check("POST /api/admin-logout clears the cookie", async () => {

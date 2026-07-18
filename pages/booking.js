@@ -6,7 +6,7 @@
 // overlap an existing appointment still show up, with a soft badge ("2
 // other bookings near this time") so the client isn't surprised later.
 
-import { renderHead, renderNav, renderFooter, toScriptJson } from "../lib/layout.js";
+import { renderHead, renderNav, renderFooter, toScriptJson, escapeHtml } from "../lib/layout.js";
 import { listServicesGroupedByCategory, listStylists } from "../lib/db.js";
 
 export async function onRequestGet(context) {
@@ -44,7 +44,7 @@ ${renderNav("/booking")}
         <label for="stylist">Stylist</label>
         <select id="stylist">
           <option value="">No preference</option>
-          ${stylists.map((s) => `<option value="${s.id}">${s.name}${s.title ? ` — ${s.title}` : ""}</option>`).join("")}
+          ${stylists.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}${s.title ? ` — ${escapeHtml(s.title)}` : ""}</option>`).join("")}
         </select>
 
         <label>Day</label>

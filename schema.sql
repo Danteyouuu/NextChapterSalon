@@ -124,6 +124,16 @@ CREATE TABLE IF NOT EXISTS ncs_gallery_items (
   active INTEGER NOT NULL DEFAULT 1
 );
 
+-- Brute-force protection for /api/admin-login -- see lib/db.js's
+-- countRecentFailedLogins()/recordFailedLogin(). Pruned periodically by the
+-- hourly cron (lib/reminders.js) so this never grows unbounded.
+CREATE TABLE IF NOT EXISTS ncs_login_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip TEXT NOT NULL,
+  attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ncs_login_attempts_ip_time ON ncs_login_attempts(ip, attempted_at);
+
 CREATE TABLE IF NOT EXISTS ncs_contact_inquiries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,

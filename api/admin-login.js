@@ -6,10 +6,18 @@
 // the password. Otherwise it's verified against the stored hash. On
 // success, sets an HttpOnly cookie holding the real manage_token — see
 // lib/auth.js for why that's the right value to store.
+//
+// Rate limited per-IP (8 failed attempts / 15 minutes) via
+// ncs_login_attempts — password hashing here is intentionally low-tech
+// (see lib/auth.js), so without this an attacker could brute-force online
+// at whatever rate the network allows. First-time setup attempts count
+// against the same limit so the bootstrap window can't be hammered either.
 
-import { getSettings, updateSettings } from "../lib/db.js";
+import { getSettings, updateSettings, countRecentFailedLogins, recordFailedLogin } from "../lib/db.js";
 import { generateSalt, hashPassword, verifyPassword, ADMIN_COOKIE_NAME, ADMIN_COOKIE_MAX_AGE } from "../lib/auth.js";
-import { buildSetCookie } from "../lib/http.js";
+import { buildSetCookie, getClientIp } from "../lib/http.js";
+
+const MAX_FAILED_ATTEMPTS = 8;
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -18,6 +26,12 @@ export async function onRequestPost(context) {
     data = await request.json();
   } catch (err) {
     return json({ ok: false, error: "Invalid request body" }, 400);
+  }
+
+  const ip = getClientIp(request);
+  const recentFailures = await countRecentFailedLogins(env, ip);
+  if (recentFailures >= MAX_FAILED_ATTEMPTS) {
+    return json({ ok: false, error: "Too many attempts. Please try again in 15 minutes." }, 429);
   }
 
   const password = String(data.password || "");
@@ -37,7 +51,10 @@ export async function onRequestPost(context) {
     await updateSettings(env, { admin_password_hash: hash, admin_password_salt: salt });
   } else {
     const valid = await verifyPassword(password, settings.admin_password_salt, settings.admin_password_hash);
-    if (!valid) return json({ ok: false, error: "Incorrect password." }, 401);
+    if (!valid) {
+      await recordFailedLogin(env, ip);
+      return json({ ok: false, error: "Incorrect password." }, 401);
+    }
   }
 
   const secure = new URL(request.url).protocol === "https:";
