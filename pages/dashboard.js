@@ -6,7 +6,7 @@
 // real-time without standing up WebSockets/Durable Objects for what's a
 // single-owner tool.
 
-import { renderHead, escapeHtml, toScriptJson } from "../lib/layout.js";
+import { renderHead, escapeHtml, escapeAttr, toScriptJson } from "../lib/layout.js";
 import { getSettingsByManageToken } from "../lib/db.js";
 import { getOrigin } from "../lib/http.js";
 
@@ -21,6 +21,11 @@ export async function onRequestGet(context) {
 
   const origin = getOrigin(request, env);
   const feedUrl = `${origin}/feed/${settings.manage_token}.ics`;
+  // webcal:// is the scheme phones actually recognize as "subscribe to this
+  // calendar" -- tapping it hands off straight to the Calendar app's
+  // subscribe/import flow instead of just opening the ICS as text in a
+  // browser tab. Same URL, different scheme.
+  const webcalUrl = feedUrl.replace(/^https?:\/\//, "webcal://");
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -230,12 +235,13 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     <button class="btn btn--gold" id="saveSettingsBtn">Save Business Info</button> <span id="settingsMsg"></span>
 
     <h3 style="margin-top:44px;">Sync to Your Phone Calendar</h3>
-    <p class="text-dim">Subscribe to this link once from your phone and every confirmed (and pending) appointment will show up in your regular calendar app going forward. It refreshes automatically every few hours &mdash; this is a one-way sync (salon &rarr; phone), not a two-way connection.</p>
+    <p class="text-dim">Tap the button below on your phone and every confirmed (and pending) appointment will show up in your regular calendar app going forward. It refreshes automatically every few hours &mdash; this is a one-way sync (salon &rarr; phone), not a two-way connection.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:16px 0;">
+      <a class="btn btn--gold btn--sm" href="${escapeAttr(webcalUrl)}" id="calSubscribeBtn">Add to Calendar</a>
+      <a class="btn btn--ghost btn--sm" href="${escapeAttr(feedUrl)}" download="next-chapter-salon.ics" id="calDownloadBtn">Download .ics File</a>
+    </div>
+    <p class="text-dim" style="font-size:0.85rem;">Tapping "Add to Calendar" opens your phone's Calendar app directly and subscribes for you &mdash; that's the one-tap option and what most iPhones expect. If it doesn't open anything (some Android browsers ignore the link type), use "Download .ics File" instead, or copy the link below and paste it into your calendar app's "Subscribe by URL" / "From URL" option.</p>
     <div class="feed-box">${escapeHtml(feedUrl)}</div>
-    <p class="text-dim" style="font-size:0.85rem;margin-top:14px;">
-      <strong>iPhone:</strong> Settings app &rarr; Calendar &rarr; Accounts &rarr; Add Account &rarr; Other &rarr; Add Subscribed Calendar &rarr; paste the link above.<br>
-      <strong>Android / Google Calendar:</strong> On desktop, open Google Calendar &rarr; Other calendars "+" &rarr; From URL &rarr; paste the link &mdash; it will then sync to the Google Calendar app on your phone automatically.
-    </p>
   </section>
 
 </main>

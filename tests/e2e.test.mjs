@@ -428,6 +428,13 @@ await check("GET /admin with valid cookie renders the actual dashboard", async (
   assert(/Owner Dashboard/i.test(text) && /Pending Requests/i.test(text), "cookie-authenticated /admin didn't render the dashboard");
 });
 
+await check("Dashboard renders a webcal:// subscribe link and a downloadable .ics link", async () => {
+  const res = await call("GET", `/dashboard/${MANAGE_TOKEN}`);
+  const text = await res.text();
+  assert(/href="webcal:\/\/[^"]+\/feed\/[^"]+\.ics"/.test(text), "no webcal:// subscribe link found");
+  assert(/href="https?:\/\/[^"]+\/feed\/[^"]+\.ics"\s+download=/.test(text), "no downloadable .ics link found");
+});
+
 await check("GET /admin with garbage cookie -> still shows login, not dashboard", async () => {
   const res = await callRaw("GET", "/admin", { cookie: "ncs_admin=not-the-real-token" });
   const text = await res.text();
