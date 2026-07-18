@@ -1023,6 +1023,11 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
   // around) ----
   function openManualModal() {
     document.getElementById('manualModal').style.display = 'flex';
+    // Scroll the form itself back to the top every time it opens -- without
+    // this, entering several walk-ins back to back left it wherever it was
+    // scrolled to (e.g. down at Notes) after the previous submit, since the
+    // modal is just hidden/shown rather than recreated each time.
+    document.getElementById('manualForm').scrollTop = 0;
     // Clear out anything left over from the last time this was opened.
     ['manualDate', 'manualTime', 'manualName', 'manualEmail', 'manualPhone', 'manualNotes'].forEach(function (id) {
       document.getElementById(id).value = '';
@@ -1044,6 +1049,7 @@ ${renderHead({ title: "Owner Dashboard", path: "" })}
     stSel.innerHTML = '<option value="">No preference</option>' + (DATA.stylists || []).filter(function (s) { return s.active; }).map(function (s) {
       return '<option value="' + s.id + '">' + escapeHtml(s.name) + '</option>';
     }).join('');
+    svcSel.focus(); // land on the first field, ready to type/select immediately
   }
   function closeManualModal() { document.getElementById('manualModal').style.display = 'none'; }
 
