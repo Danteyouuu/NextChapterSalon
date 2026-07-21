@@ -29,10 +29,20 @@ ${renderNav("/contact")}
       <div class="reveal">
         <h3>Visit</h3>
         <p class="text-dim">${escapeHtml(address || "Address on request")}</p>
-        <div class="placeholder-tile" style="aspect-ratio:16/10;margin:20px 0;">
+        ${
+          address
+            ? `<div style="aspect-ratio:16/10;margin:20px 0;border-radius:var(--radius, 8px);overflow:hidden;">
+          <iframe
+            src="https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed"
+            width="100%" height="100%" style="border:0;display:block;"
+            loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+            title="Map to ${escapeHtml(settings?.business_name || "Next Chapter Salon")}"></iframe>
+        </div>`
+            : `<div class="placeholder-tile" style="aspect-ratio:16/10;margin:20px 0;">
           <span class="pt-label">Map</span>
           <span style="font-size:0.7rem;color:var(--cream-faint);">Embed coming soon</span>
-        </div>
+        </div>`
+        }
         <h3>Hours</h3>
         <p class="text-dim">Tue &ndash; Fri: 10am &ndash; 7pm<br>Saturday: 9am &ndash; 5pm<br>Sun &ndash; Mon: Closed</p>
         <h3>Reach Us Directly</h3>
